@@ -5,4 +5,4 @@ fake-useragent==1.4.0
 requests==2.31.0
 colorama==0.4.6
 asyncio-throttle==1.0.0
-aiogram=1.0.0
+aiogram==1.0.0
