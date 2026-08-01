@@ -276,7 +276,7 @@ ULTIMATE_APIS = [
         "url": "https://admapi.boghrat.com/boghratsite/Account/RegisterOTP",
         "json": {
             "Phonenumber": "0{phone}",
-            "recaptcha": null,
+            "recaptcha": None,
             "AppointmentCode": ""
         },
         "method": "POST",
