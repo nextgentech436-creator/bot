@@ -6,8 +6,6 @@ from aiogram import Bot, types, F
 from aiogram.dispatcher import Dispatcher
 import random
 import time
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart, Command
 from aiogram.client.default import DefaultBotProperties
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
