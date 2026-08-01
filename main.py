@@ -2,12 +2,15 @@
 
 #!/usr/bin/env python3
 
+#!/usr/bin/env python3
+
 import asyncio
 import aiohttp
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
+from aiogram.filters import Command, CommandStart  # ADD THIS LINE
 import random
 import time
 import logging
