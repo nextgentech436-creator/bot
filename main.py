@@ -539,7 +539,7 @@ ULTIMATE_APIS = [
     },
     {
         "source": "achareh.co",
-        "url": "https://api.achareh.co/v2/accounts/login/?web=true",
+        "url": "https://api.achareh.co/v2/accounts/login/?web=True",
         "json": {
             "phone": "+98{phone}",
             "context": "general"
@@ -564,7 +564,7 @@ ULTIMATE_APIS = [
         "json": {
             "phoneNumber": "0{phone}",
             "serviceName": "AXON",
-            "needTag": true,
+            "needTag": True,
             "sendAudioOtp": false
         },
         "method": "POST",
@@ -894,7 +894,7 @@ ULTIMATE_APIS = [
         "json": {
             "mobile": "0{phone}",
             "deviceTypeCode": 10,
-            "confirmTerms": true,
+            "confirmTerms": True,
             "notRobot": false,
             "otpType": 0,
             "ValidationCodeCreateReason": 5,
