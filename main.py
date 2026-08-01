@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 
+#!/usr/bin/env python3
+
 import asyncio
 import aiohttp
-from aiogram import Bot, types, F
-from aiogram.dispatcher import Dispatcher
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.client.default import DefaultBotProperties
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 import random
 import time
-from aiogram.client.default import DefaultBotProperties
-from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 
 # Configure logging
