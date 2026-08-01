@@ -453,7 +453,7 @@ ULTIMATE_APIS = [
                     "email_phone": ""
                 }
             ],
-            "validated": false
+            "validated": False
         },
         "method": "POST",
         "capacity": 20,
