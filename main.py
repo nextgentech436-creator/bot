@@ -677,7 +677,7 @@ ULTIMATE_APIS = [
             "backUrl": "/",
             "username": "0{phone}",
             "otp_call": False,
-            "hash": null
+            "hash": None
         },
         "method": "POST",
         "capacity": 1,
@@ -730,7 +730,7 @@ ULTIMATE_APIS = [
         "url": "https://api2.eligasht.com/api/account/register",
         "json": {
             "userName": "0{phone}",
-            "recaptchaToken": null
+            "recaptchaToken": None
         },
         "method": "POST",
         "capacity": 10,
@@ -986,8 +986,8 @@ ULTIMATE_APIS = [
         "url": "https://api.sibche.com/profile/sendCode",
         "json": {
             "mobile": "0{phone}",
-            "spec-g": null,
-            "g-recaptcha-response": "null"
+            "spec-g": None,
+            "g-recaptcha-response": "None"
         },
         "method": "POST",
         "capacity": 3,
