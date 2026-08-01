@@ -2,6 +2,7 @@
 
 import asyncio
 import aiohttp
+import aiogram
 import random
 import time
 from aiogram import Bot, Dispatcher, types, F
