@@ -153,7 +153,7 @@ ULTIMATE_APIS = [
                 "website": "32e11191-2e9b-41df-80ca-fb209d727569",
                 "hostname": "mobile140.com", "screen": "1566x364", 
                 "language": "en-US", 
-                "url":"/login?view=confirm&mobile=0{phone}&exist=false&redirect=/",
+                "url":"/login?view=confirm&mobile=0{phone}&exist=False&redirect=/",
                 "referrer":"/login?redirect=/"
             }
         },
@@ -565,7 +565,7 @@ ULTIMATE_APIS = [
             "phoneNumber": "0{phone}",
             "serviceName": "AXON",
             "needTag": True,
-            "sendAudioOtp": false
+            "sendAudioOtp": False
         },
         "method": "POST",
         "capacity": 3,
@@ -588,7 +588,7 @@ ULTIMATE_APIS = [
         "json": {
             "mobile": "0{phone}",
             "client_id": "11",
-            "login_by_backup_mobile": false
+            "login_by_backup_mobile": False
         },
         "method": "POST",
         "capacity": 5,
@@ -620,8 +620,8 @@ ULTIMATE_APIS = [
         "url": "https://api-sejel.bitpin.ir/v1/usr/auth/authentication/",
         "json": {
             "password": "12345678e",
-            "resend": false,
-            "use_voice_call": false,
+            "resend": False,
+            "use_voice_call": False,
             "phone": "0{phone}",
             "device_type": "web"
         },
@@ -676,7 +676,7 @@ ULTIMATE_APIS = [
         "json": {
             "backUrl": "/",
             "username": "0{phone}",
-            "otp_call": false,
+            "otp_call": False,
             "hash": null
         },
         "method": "POST",
@@ -895,11 +895,11 @@ ULTIMATE_APIS = [
             "mobile": "0{phone}",
             "deviceTypeCode": 10,
             "confirmTerms": True,
-            "notRobot": false,
+            "notRobot": False,
             "otpType": 0,
             "ValidationCodeCreateReason": 5,
             "OtpApp": 0,
-            "IsAppOnly": false
+            "IsAppOnly": False
         },
         "method": "POST",
         "capacity": 20,
@@ -1153,7 +1153,7 @@ ULTIMATE_APIS = [
         "url": "https://chat.yarai.ir/api/v1/otps/request-otp",
         "json": {
             "phone": "0{phone}",
-            "isAndroid": false
+            "isAndroid": False
         },
         "method": "POST",
         "capacity": 20,
