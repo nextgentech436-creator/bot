@@ -406,7 +406,7 @@ ULTIMATE_APIS = [
             "lastName": "\u00d9\u201a",
             "username": "0{phone}",
             "referralCode": "",
-            "termsAndConditions": true
+            "termsAndConditions": True
         },
         "method": "POST",
         "capacity": 1,
@@ -489,7 +489,7 @@ ULTIMATE_APIS = [
             "lastName": "q",
             "gender": 0,
             "registerField": "tel",
-            "termsAndConditions": true,
+            "termsAndConditions": True,
             "tel": "0{phone}"
         },
         "method": "POST",
